@@ -25,6 +25,7 @@ import org.apache.celeborn.common.identity.UserIdentifier;
 import org.apache.celeborn.common.identity.UserIdentifier$;
 import org.apache.celeborn.common.meta.DiskInfo;
 import org.apache.celeborn.common.meta.WorkerInfo;
+import org.apache.celeborn.common.meta.WorkerStats;
 import org.apache.celeborn.common.meta.WorkerStatus;
 import org.apache.celeborn.common.protocol.StorageInfo;
 import org.apache.celeborn.common.quota.ResourceConsumption;
@@ -162,6 +163,12 @@ public class MetaUtil {
         .setState(ResourceProtos.WorkerStatus.State.forNumber(workerStatus.getStateValue()))
         .setStateStartTime(workerStatus.getStateStartTime())
         .build();
+  }
+
+  public static ResourceProtos.WorkerStats toPbWorkerStats(WorkerStats workerStats) {
+    return ResourceProtos.WorkerStats.newBuilder()
+            .putAllStats(workerStats.getStats())
+            .build();
   }
 
   public static WorkerStatus fromPbWorkerStatus(ResourceProtos.WorkerStatus workerStatus) {

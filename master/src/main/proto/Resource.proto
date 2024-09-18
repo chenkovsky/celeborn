@@ -150,6 +150,7 @@ message WorkerHeartbeatRequest {
   map<string, int64> estimatedAppDiskUsage = 9;
   required bool highWorkload = 10;
   optional WorkerStatus workerStatus = 11;
+  optional WorkerStats workerStats = 12;
 }
 
 message WorkerStatus {
@@ -165,6 +166,10 @@ message WorkerStatus {
 
   required State state = 1;
   required int64 stateStartTime = 2;
+}
+
+message WorkerStats {
+  map<string, string> stats = 1;
 }
 
 message RegisterWorkerRequest {

@@ -196,6 +196,10 @@ message PbRegisterWorker {
   string networkLocation = 11;
 }
 
+message PbWorkerStats {
+  map<string, string> stats = 1;
+}
+
 message PbHeartbeatFromWorker {
   string host = 1;
   int32 rpcPort = 2;
@@ -209,6 +213,7 @@ message PbHeartbeatFromWorker {
   map<string, int64> estimatedAppDiskUsage = 10;
   bool highWorkload = 11;
   PbWorkerStatus workerStatus = 12;
+  PbWorkerStats workerStats = 13;
 }
 
 message PbWorkerStatus {

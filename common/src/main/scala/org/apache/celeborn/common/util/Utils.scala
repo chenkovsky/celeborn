@@ -26,22 +26,19 @@ import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
 import java.util
 import java.util.{Locale, Properties, Random, UUID}
-import java.util.concurrent.{Callable, ThreadPoolExecutor, TimeoutException, TimeUnit}
-
+import java.util.concurrent.{Callable, ThreadPoolExecutor, TimeUnit, TimeoutException}
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.{Random => ScalaRandom, Try}
+import scala.util.{Failure, Success, Try, Random => ScalaRandom}
 import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
-
 import com.google.protobuf.{ByteString, GeneratedMessageV3}
 import io.netty.channel.unix.Errors.NativeIoException
 import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.roaringbitmap.RoaringBitmap
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.CelebornConf.PORT_MAX_RETRY
 import org.apache.celeborn.common.exception.CelebornException
@@ -53,6 +50,8 @@ import org.apache.celeborn.common.protocol.{PartitionLocation, PartitionSplitMod
 import org.apache.celeborn.common.protocol.message.{ControlMessages, Message, StatusCode}
 import org.apache.celeborn.common.protocol.message.ControlMessages.WorkerResource
 import org.apache.celeborn.reflect.DynConstructors
+
+import java.lang.reflect.InvocationTargetException
 
 object Utils extends Logging {
 
@@ -570,6 +569,46 @@ object Utils extends Logging {
     // scalastyle:off classforname
     Class.forName(className, true, getContextOrClassLoader)
     // scalastyle:on classforname
+  }
+
+  def loadExtensions[T <: AnyRef](
+      extClass: Class[T], classes: Seq[String], conf: CelebornConf): Seq[T] = {
+    classes.flatMap { name =>
+      try {
+        val klass = classForName(name)
+        require(extClass.isAssignableFrom(klass),
+          s"$name is not a subclass of ${extClass.getName}.")
+
+        val ext = Try(klass.getConstructor(classOf[CelebornConf])) match {
+          case Success(ctor) =>
+            ctor.newInstance(conf)
+
+          case Failure(_) =>
+            klass.getConstructor().newInstance()
+        }
+
+        Some(ext.asInstanceOf[T])
+      } catch {
+        case _: NoSuchMethodException =>
+          throw new CelebornException(
+            s"$name did not have a zero-argument constructor or a" +
+              " single-argument constructor that accepts CelebornConf. Note: if the class is" +
+              " defined inside of another Scala class, then its constructors may accept an" +
+              " implicit parameter that references the enclosing class; in this case, you must" +
+              " define the class as a top-level class in order to prevent this extra" +
+              " parameter from breaking Celeborn's ability to find a valid constructor.")
+
+        case e: InvocationTargetException =>
+          e.getCause match {
+            case uoe: UnsupportedOperationException =>
+              logDebug(s"Extension $name not being initialized.", uoe)
+              None
+            case null => throw e
+
+            case cause => throw cause
+          }
+      }
+    }
   }
 
   def instantiateMasterEndpointResolver[T](

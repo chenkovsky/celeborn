@@ -20,13 +20,10 @@ package org.apache.celeborn.common.util
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.IntFunction
-
 import scala.collection.JavaConverters._
-
 import com.google.protobuf.InvalidProtocolBufferException
-
 import org.apache.celeborn.common.identity.UserIdentifier
-import org.apache.celeborn.common.meta.{AppDiskUsage, AppDiskUsageSnapShot, ApplicationMeta, DiskFileInfo, DiskInfo, MapFileMeta, ReduceFileMeta, WorkerEventInfo, WorkerInfo, WorkerStatus}
+import org.apache.celeborn.common.meta.{AppDiskUsage, AppDiskUsageSnapShot, ApplicationMeta, DiskFileInfo, DiskInfo, MapFileMeta, ReduceFileMeta, WorkerEventInfo, WorkerInfo, WorkerStats, WorkerStatus}
 import org.apache.celeborn.common.meta.MapFileMeta.SegmentIndex
 import org.apache.celeborn.common.protocol._
 import org.apache.celeborn.common.protocol.PartitionLocation.Mode
@@ -525,6 +522,16 @@ object PbSerDeUtils {
 
   def fromPbWorkerStatus(pbWorkerStatus: PbWorkerStatus): WorkerStatus = {
     new WorkerStatus(pbWorkerStatus.getState.getNumber, pbWorkerStatus.getStateStartTime)
+  }
+
+  def toPbWorkerStats(workerStats: WorkerStats): PbWorkerStats = {
+    PbWorkerStats.newBuilder()
+      .putAllStats(workerStats.getStats)
+      .build()
+  }
+
+  def fromPbWorkerStats(pbWorkerStats: PbWorkerStats): WorkerStats = {
+    new WorkerStats(pbWorkerStats.getStats)
   }
 
   def toPbWorkerEventInfo(workerEventInfo: WorkerEventInfo): PbWorkerEventInfo = {
