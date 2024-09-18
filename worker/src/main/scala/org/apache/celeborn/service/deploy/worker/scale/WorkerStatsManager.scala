@@ -5,7 +5,8 @@ import com.codahale.metrics.Gauge
 import scala.collection.JavaConverters._
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.internal.Logging
-import org.apache.celeborn.common.meta.{ScaleMetrics, TimeWindow, WorkerStats}
+import org.apache.celeborn.common.meta.{TimeWindow, WorkerStats}
+import org.apache.celeborn.common.scale.ScaleMetrics
 import org.apache.celeborn.common.util.ThreadUtils
 import org.apache.celeborn.service.deploy.worker.Worker
 import org.apache.celeborn.service.deploy.worker.scale.metrics.{CPUUsageGauge, DirectMemoryTotalGauge, DirectMemoryUsageGauge}

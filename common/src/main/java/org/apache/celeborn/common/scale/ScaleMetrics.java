@@ -1,4 +1,4 @@
-package org.apache.celeborn.common.meta;
+package org.apache.celeborn.common.scale;
 
 public class ScaleMetrics {
     public static final String DIRECT_MEMORY_TOTAL = "directMemoryTotal";
