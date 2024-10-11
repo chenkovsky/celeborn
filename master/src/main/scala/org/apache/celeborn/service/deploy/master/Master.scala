@@ -23,21 +23,18 @@ import java.util
 import java.util.concurrent.{ExecutorService, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.ToLongFunction
-
 import scala.collection.JavaConverters._
 import scala.util.Random
-
 import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.ratis.proto.RaftProtos
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.client.MasterClient
 import org.apache.celeborn.common.exception.CelebornException
 import org.apache.celeborn.common.identity.UserIdentifier
 import org.apache.celeborn.common.internal.Logging
-import org.apache.celeborn.common.meta.{DiskInfo, WorkerInfo, WorkerStatus}
+import org.apache.celeborn.common.meta.{DiskInfo, WorkerInfo, WorkerStats, WorkerStatus}
 import org.apache.celeborn.common.metrics.MetricsSystem
 import org.apache.celeborn.common.metrics.source.{JVMCPUSource, JVMSource, ResourceConsumptionSource, SystemMiscSource, ThreadPoolSource}
 import org.apache.celeborn.common.network.CelebornRackResolver
@@ -481,6 +478,7 @@ private[celeborn] class Master(
           estimatedAppDiskUsage,
           highWorkload,
           workerStatus,
+          workerStats,
           requestId) =>
       logDebug(s"Received heartbeat from" +
         s" worker $host:$rpcPort:$pushPort:$fetchPort:$replicatePort with $disks.")
@@ -499,6 +497,7 @@ private[celeborn] class Master(
           estimatedAppDiskUsage,
           highWorkload,
           workerStatus,
+          workerStats,
           requestId))
 
     case ReportWorkerUnavailable(failedWorkers: util.List[WorkerInfo], requestId: String) =>
@@ -641,6 +640,7 @@ private[celeborn] class Master(
       estimatedAppDiskUsage: util.HashMap[String, java.lang.Long],
       highWorkload: Boolean,
       workerStatus: WorkerStatus,
+      workerStats: WorkerStats,
       requestId: String): Unit = {
     val targetWorker = new WorkerInfo(host, rpcPort, pushPort, fetchPort, replicatePort)
     val registered = statusSystem.workers.asScala.contains(targetWorker)
@@ -660,6 +660,7 @@ private[celeborn] class Master(
         System.currentTimeMillis(),
         highWorkload,
         workerStatus,
+        workerStats,
         requestId)
     }
 

@@ -20,15 +20,12 @@ package org.apache.celeborn.service.deploy.worker
 import java.io.File
 import java.lang.{Long => JLong}
 import java.util
-import java.util.{HashMap => JHashMap, HashSet => JHashSet, Locale, Map => JMap, UUID}
+import java.util.{Locale, UUID, HashMap => JHashMap, HashSet => JHashSet, Map => JMap}
 import java.util.concurrent._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicIntegerArray}
-
 import scala.collection.JavaConverters._
-
 import com.google.common.annotations.VisibleForTesting
 import io.netty.util.HashedWheelTimer
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.CelebornConf._
 import org.apache.celeborn.common.client.MasterClient
@@ -49,8 +46,6 @@ import org.apache.celeborn.common.quota.ResourceConsumption
 import org.apache.celeborn.common.rpc._
 import org.apache.celeborn.common.rpc.{RpcSecurityContextBuilder, ServerSaslContextBuilder}
 import org.apache.celeborn.common.util.{CelebornExitKind, CollectionUtils, JavaUtils, ShutdownHookManager, SignalUtils, ThreadUtils, Utils}
-// Can Remove this if celeborn don't support scala211 in future
-import org.apache.celeborn.common.util.FunctionConverter._
 import org.apache.celeborn.server.common.{HttpService, Service}
 import org.apache.celeborn.service.deploy.worker.WorkerSource.ACTIVE_CONNECTION_COUNT
 import org.apache.celeborn.service.deploy.worker.congestcontrol.CongestionController
@@ -58,6 +53,7 @@ import org.apache.celeborn.service.deploy.worker.memory.{ChannelsLimiter, Memory
 import org.apache.celeborn.service.deploy.worker.memory.MemoryManager.ServingState
 import org.apache.celeborn.service.deploy.worker.monitor.JVMQuake
 import org.apache.celeborn.service.deploy.worker.profiler.JVMProfiler
+import org.apache.celeborn.service.deploy.worker.scale.IWorkerStatsManager
 import org.apache.celeborn.service.deploy.worker.storage.{PartitionFilesSorter, StorageManager}
 
 private[celeborn] class Worker(
@@ -83,6 +79,13 @@ private[celeborn] class Worker(
   metricsSystem.registerSource(new SystemMiscSource(conf, MetricsSystem.ROLE_WORKER))
 
   val workerStatusManager = new WorkerStatusManager(conf)
+  val workerStatsManager = {
+    val managers = Utils.loadExtensions(classOf[IWorkerStatsManager], Seq(conf.scaleStatsManagerClassName), conf)
+    assert(managers.nonEmpty, "A valid worker stats manager must be specified by config " +
+      s"${CelebornConf.SCALE_STATS_MANAGER_CLASS_NAME.key}, but ${conf.scaleStatsManagerClassName} resulted in zero " +
+      "valid stats manager.")
+    managers.head
+  }
   private val authEnabled = conf.authEnabled
   private val secretRegistry = new WorkerSecretRegistryImpl(conf.workerApplicationRegistryCacheSize)
 
@@ -474,7 +477,9 @@ private[celeborn] class Worker(
         activeShuffleKeys,
         estimatedAppDiskUsage,
         highWorkload,
-        workerStatusManager.currentWorkerStatus),
+        workerStatusManager.currentWorkerStatus,
+        workerStatsManager.currentWorkerStats
+      ),
       classOf[HeartbeatFromWorkerResponse])
     response.expiredShuffleKeys.asScala.foreach(shuffleKey => workerInfo.releaseSlots(shuffleKey))
     cleanTaskQueue.put(response.expiredShuffleKeys)
@@ -542,6 +547,7 @@ private[celeborn] class Worker(
     fetchHandler.init(this)
     controller.init(this)
     workerStatusManager.init(this)
+    workerStatsManager.init(this)
 
     logInfo("Worker started.")
     rpcEnv.awaitTermination()
@@ -553,7 +559,6 @@ private[celeborn] class Worker(
   override def stop(exitKind: Int): Unit = {
     if (!stopped) {
       logInfo("Stopping Worker.")
-
       if (jvmProfiler != null) {
         jvmProfiler.stop()
       }
@@ -606,6 +611,7 @@ private[celeborn] class Worker(
       if (conf.internalPortEnabled) {
         internalRpcEnvInUse.stop(internalRpcEndpointRef)
       }
+      workerStatsManager.stop()
       super.stop(exitKind)
 
       logInfo("Worker is stopped.")

@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.celeborn.common.meta.WorkerStats;
 import scala.Tuple2;
 
 import com.google.common.collect.Lists;
@@ -256,6 +257,7 @@ public class RatisMasterStatusSystemSuiteJ {
   private static final int SHUFFLEID1 = 1;
   private static final String SHUFFLEKEY1 = APPID1 + "-" + SHUFFLEID1;
   private static final WorkerStatus workerStatus = WorkerStatus.normalWorkerStatus();
+  private static final WorkerStats workerStats = WorkerStats.defaultWorkerStats();
 
   private String getNewReqeustId() {
     return MasterClient.encodeRequestId(UUID.randomUUID().toString(), callerId.incrementAndGet());
@@ -920,6 +922,7 @@ public class RatisMasterStatusSystemSuiteJ {
         1,
         false,
         workerStatus,
+        workerStats,
         getNewReqeustId());
     Thread.sleep(3000L);
 
@@ -939,6 +942,7 @@ public class RatisMasterStatusSystemSuiteJ {
         1,
         false,
         workerStatus,
+        workerStats,
         getNewReqeustId());
     Thread.sleep(3000L);
 
@@ -959,6 +963,7 @@ public class RatisMasterStatusSystemSuiteJ {
         1,
         false,
         workerStatus,
+        workerStats,
         getNewReqeustId());
     Thread.sleep(3000L);
 
@@ -979,6 +984,7 @@ public class RatisMasterStatusSystemSuiteJ {
         1,
         true,
         workerStatus,
+        workerStats,
         getNewReqeustId());
     Thread.sleep(3000L);
     Assert.assertEquals(2, statusSystem.excludedWorkers.size());

@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.celeborn.common.meta.*;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -34,10 +35,6 @@ import org.junit.Test;
 import org.apache.celeborn.common.CelebornConf;
 import org.apache.celeborn.common.client.MasterClient;
 import org.apache.celeborn.common.identity.UserIdentifier;
-import org.apache.celeborn.common.meta.ApplicationMeta;
-import org.apache.celeborn.common.meta.DiskInfo;
-import org.apache.celeborn.common.meta.WorkerInfo;
-import org.apache.celeborn.common.meta.WorkerStatus;
 import org.apache.celeborn.common.quota.ResourceConsumption;
 import org.apache.celeborn.common.rpc.RpcEndpointAddress;
 import org.apache.celeborn.common.rpc.RpcEndpointRef;
@@ -88,6 +85,7 @@ public class DefaultMetaSystemSuiteJ {
       new HashMap<>();
 
   private static final WorkerStatus workerStatus = WorkerStatus.normalWorkerStatus();
+  private static final WorkerStats workerStats = WorkerStats.defaultWorkerStats();
 
   @Before
   public void setUp() {
@@ -613,6 +611,7 @@ public class DefaultMetaSystemSuiteJ {
         1,
         false,
         workerStatus,
+        workerStats,
         getNewReqeustId());
 
     assertEquals(statusSystem.excludedWorkers.size(), 1);
@@ -629,6 +628,7 @@ public class DefaultMetaSystemSuiteJ {
         1,
         false,
         workerStatus,
+        workerStats,
         getNewReqeustId());
 
     assertEquals(statusSystem.excludedWorkers.size(), 2);
@@ -645,6 +645,7 @@ public class DefaultMetaSystemSuiteJ {
         1,
         false,
         workerStatus,
+        workerStats,
         getNewReqeustId());
 
     assertEquals(statusSystem.excludedWorkers.size(), 2);
@@ -661,6 +662,7 @@ public class DefaultMetaSystemSuiteJ {
         1,
         true,
         workerStatus,
+        workerStats,
         getNewReqeustId());
 
     assertEquals(statusSystem.excludedWorkers.size(), 3);

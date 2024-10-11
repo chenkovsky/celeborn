@@ -19,14 +19,11 @@ package org.apache.celeborn.common.protocol.message
 
 import java.util
 import java.util.{Collections, UUID}
-
 import scala.collection.JavaConverters._
-
 import org.roaringbitmap.RoaringBitmap
-
 import org.apache.celeborn.common.identity.UserIdentifier
 import org.apache.celeborn.common.internal.Logging
-import org.apache.celeborn.common.meta.{DiskInfo, WorkerInfo, WorkerStatus}
+import org.apache.celeborn.common.meta.{DiskInfo, WorkerInfo, WorkerStats, WorkerStatus}
 import org.apache.celeborn.common.network.protocol.TransportMessage
 import org.apache.celeborn.common.protocol._
 import org.apache.celeborn.common.protocol.MessageType._
@@ -121,6 +118,7 @@ object ControlMessages extends Logging {
       estimatedAppDiskUsage: util.HashMap[String, java.lang.Long],
       highWorkload: Boolean,
       workerStatus: WorkerStatus,
+      workerStats: WorkerStats,
       override var requestId: String = ZERO_UUID) extends MasterRequestMessage
 
   case class HeartbeatFromWorkerResponse(
@@ -561,6 +559,7 @@ object ControlMessages extends Logging {
           estimatedAppDiskUsage,
           highWorkload,
           workerStatus,
+          workerStats,
           requestId) =>
       val pbDisks = disks.map(PbSerDeUtils.toPbDiskInfo).asJava
       val pbUserResourceConsumption =
@@ -577,6 +576,7 @@ object ControlMessages extends Logging {
         .putAllEstimatedAppDiskUsage(estimatedAppDiskUsage)
         .setHighWorkload(highWorkload)
         .setWorkerStatus(PbSerDeUtils.toPbWorkerStatus(workerStatus))
+        .setWorkerStats(PbSerDeUtils.toPbWorkerStats(workerStats))
         .setRequestId(requestId)
         .build().toByteArray
       new TransportMessage(MessageType.HEARTBEAT_FROM_WORKER, payload)
@@ -990,6 +990,7 @@ object ControlMessages extends Logging {
         }
 
         val workerStatus = PbSerDeUtils.fromPbWorkerStatus(pbHeartbeatFromWorker.getWorkerStatus)
+        val workerStats = PbSerDeUtils.fromPbWorkerStats(pbHeartbeatFromWorker.getWorkerStats)
 
         HeartbeatFromWorker(
           pbHeartbeatFromWorker.getHost,
@@ -1003,6 +1004,7 @@ object ControlMessages extends Logging {
           estimatedAppDiskUsage,
           pbHeartbeatFromWorker.getHighWorkload,
           workerStatus,
+          workerStats,
           pbHeartbeatFromWorker.getRequestId)
 
       case HEARTBEAT_FROM_WORKER_RESPONSE_VALUE =>

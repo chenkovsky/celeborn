@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.celeborn.common.meta.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,11 +29,6 @@ import org.apache.celeborn.common.CelebornConf;
 import org.apache.celeborn.common.client.MasterClient;
 import org.apache.celeborn.common.exception.CelebornRuntimeException;
 import org.apache.celeborn.common.identity.UserIdentifier;
-import org.apache.celeborn.common.meta.AppDiskUsageMetric;
-import org.apache.celeborn.common.meta.ApplicationMeta;
-import org.apache.celeborn.common.meta.DiskInfo;
-import org.apache.celeborn.common.meta.WorkerInfo;
-import org.apache.celeborn.common.meta.WorkerStatus;
 import org.apache.celeborn.common.network.CelebornRackResolver;
 import org.apache.celeborn.common.quota.ResourceConsumption;
 import org.apache.celeborn.common.rpc.RpcEnv;
@@ -245,7 +241,7 @@ public class HAMasterMetaManager extends AbstractMetaManager {
 
   @Override
   public void handleWorkerHeartbeat(
-      String host,
+          String host,
       int rpcPort,
       int pushPort,
       int fetchPort,
@@ -256,6 +252,7 @@ public class HAMasterMetaManager extends AbstractMetaManager {
       long time,
       boolean highWorkload,
       WorkerStatus workerStatus,
+      WorkerStats workerStats,
       String requestId) {
     try {
       ratisServer.submitRequest(
@@ -274,6 +271,7 @@ public class HAMasterMetaManager extends AbstractMetaManager {
                           MetaUtil.toPbUserResourceConsumption(userResourceConsumption))
                       .putAllEstimatedAppDiskUsage(estimatedAppDiskUsage)
                       .setWorkerStatus(MetaUtil.toPbWorkerStatus(workerStatus))
+                      .setWorkerStats(MetaUtil.toPbWorkerStats(workerStats))
                       .setTime(time)
                       .setHighWorkload(highWorkload)
                       .build())

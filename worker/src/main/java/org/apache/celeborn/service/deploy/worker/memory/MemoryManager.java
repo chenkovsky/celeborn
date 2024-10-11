@@ -520,6 +520,10 @@ public class MemoryManager {
     return getMemoryUsage() / (double) (maxDirectMemory);
   }
 
+  public long workerMaxDirectMemory() {
+    return maxDirectMemory;
+  }
+
   public long getMemoryFileStorageCounter() {
     return memoryFileStorageCounter.sum();
   }
