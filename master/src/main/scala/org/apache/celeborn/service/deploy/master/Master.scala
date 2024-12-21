@@ -24,15 +24,12 @@ import java.util.Collections
 import java.util.concurrent.{ExecutorService, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.ToLongFunction
-
 import scala.collection.JavaConverters._
 import scala.util.Random
-
 import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.ratis.proto.RaftProtos
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.client.MasterClient
 import org.apache.celeborn.common.exception.CelebornException
@@ -54,6 +51,7 @@ import org.apache.celeborn.server.common.{HttpService, Service}
 import org.apache.celeborn.service.deploy.master.clustermeta.SingleMasterMetaManager
 import org.apache.celeborn.service.deploy.master.clustermeta.ha.{HAHelper, HAMasterMetaManager, MetaHandler}
 import org.apache.celeborn.service.deploy.master.quota.QuotaManager
+import org.apache.celeborn.service.deploy.master.scale.IScaleManager
 import org.apache.celeborn.service.deploy.master.tags.TagsManager
 
 private[celeborn] class Master(
@@ -282,6 +280,18 @@ private[celeborn] class Master(
     statusSystem.decommissionWorkers.size()
   }
 
+  private val scaleManager = if (conf.scaleUpEnabled || conf.scaleDownEnabled) {
+    val managers = Utils.loadExtensions(classOf[IScaleManager], Seq(conf.scaleScalerClassName), conf)
+    assert(managers.nonEmpty, "A valid scale manager must be specified by config " +
+      s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
+      "valid scale manager.")
+    val manager = managers.head
+    manager.init(this.statusSystem)
+    Some(manager)
+  } else {
+    None
+  }
+
   private val threadsStarted: AtomicBoolean = new AtomicBoolean(false)
   rpcEnv.setupEndpoint(RpcNameConstants.MASTER_EP, this)
   // Visible for testing
@@ -324,7 +334,7 @@ private[celeborn] class Master(
       checkForDFSRemnantDirsTimeOutTask =
         scheduleCheckTask(dfsExpireDirsTimeoutMS, CheckForDFSExpiredDirsTimeout)
     }
-
+    scaleManager.foreach(_.run())
   }
 
   private def scheduleCheckTask[T](timeoutMS: Long, message: T): ScheduledFuture[_] = {
@@ -350,6 +360,7 @@ private[celeborn] class Master(
     Option(checkForDFSRemnantDirsTimeOutTask).foreach(_.cancel(true))
     forwardMessageThread.shutdownNow()
     rackResolver.stop()
+    scaleManager.foreach(_.stop())
     if (authEnabled) {
       sendApplicationMetaExecutor.shutdownNow()
     }

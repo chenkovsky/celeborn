@@ -483,11 +483,12 @@ object PbSerDeUtils {
     PbWorkerStatus.newBuilder()
       .setState(workerStatus.getState)
       .setStateStartTime(workerStatus.getStateStartTime)
+      .putAllStats(workerStatus.getStats)
       .build()
   }
 
   def fromPbWorkerStatus(pbWorkerStatus: PbWorkerStatus): WorkerStatus = {
-    new WorkerStatus(pbWorkerStatus.getState.getNumber, pbWorkerStatus.getStateStartTime)
+    new WorkerStatus(pbWorkerStatus.getState.getNumber, pbWorkerStatus.getStateStartTime, pbWorkerStatus.getStatsMap)
   }
 
   def toPbWorkerEventInfo(workerEventInfo: WorkerEventInfo): PbWorkerEventInfo = {

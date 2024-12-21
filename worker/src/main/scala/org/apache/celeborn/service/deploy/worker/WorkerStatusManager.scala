@@ -19,11 +19,8 @@ package org.apache.celeborn.service.deploy.worker
 
 import java.util
 import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.collection.immutable.HashSet
-
 import com.google.common.collect.Sets
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.internal.Logging
 import org.apache.celeborn.common.meta.WorkerStatus
@@ -32,9 +29,12 @@ import org.apache.celeborn.common.protocol.WorkerEventType
 import org.apache.celeborn.common.util.ThreadUtils
 import org.apache.celeborn.service.deploy.worker.storage.StorageManager
 
+import java.util.concurrent.ConcurrentHashMap
+
 private[celeborn] class WorkerStatusManager(conf: CelebornConf) extends Logging {
 
-  var currentWorkerStatus = WorkerStatus.normalWorkerStatus()
+  private val stats = new ConcurrentHashMap[String, String]()
+  var currentWorkerStatus: WorkerStatus = WorkerStatus.normalWorkerStatus(stats)
   var exitEventType = WorkerEventType.Immediately
   private var worker: Worker = _
   private var shutdown: AtomicBoolean = _
@@ -128,7 +128,7 @@ private[celeborn] class WorkerStatusManager(conf: CelebornConf) extends Logging 
     val allowStates = transitionStateMap.get(currentWorkerStatus.getState)
     if (allowStates != null && allowStates.contains(state)) {
       logInfo(s"Worker transition status from ${currentWorkerStatus.getState} to $state.")
-      currentWorkerStatus = new WorkerStatus(state.getNumber, System.currentTimeMillis())
+      currentWorkerStatus = new WorkerStatus(state.getNumber, System.currentTimeMillis(), stats)
       if (worker != null && worker.workerInfo != null) {
         worker.workerInfo.setWorkerStatus(currentWorkerStatus)
       }
@@ -156,6 +156,10 @@ private[celeborn] class WorkerStatusManager(conf: CelebornConf) extends Logging 
 
   def getWorkerState(): State = {
     currentWorkerStatus.getState
+  }
+
+  def getWorkerStats: util.Map[String, String] = {
+    stats
   }
 
   private def inExitStatus(): Boolean = {

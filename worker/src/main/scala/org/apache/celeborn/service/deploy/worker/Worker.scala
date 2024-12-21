@@ -19,15 +19,12 @@ package org.apache.celeborn.service.deploy.worker
 
 import java.io.File
 import java.util
-import java.util.{HashSet => JHashSet, Locale, Map => JMap, UUID}
+import java.util.{Locale, UUID, HashSet => JHashSet, Map => JMap}
 import java.util.concurrent._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicIntegerArray}
-
 import scala.collection.JavaConverters._
-
 import com.google.common.annotations.VisibleForTesting
 import io.netty.util.HashedWheelTimer
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.CelebornConf._
 import org.apache.celeborn.common.client.MasterClient
@@ -36,6 +33,7 @@ import org.apache.celeborn.common.identity.UserIdentifier
 import org.apache.celeborn.common.internal.Logging
 import org.apache.celeborn.common.meta.{DiskInfo, WorkerInfo, WorkerPartitionLocationInfo}
 import org.apache.celeborn.common.metrics.MetricsSystem
+import org.apache.celeborn.common.metrics.sink.Sink
 import org.apache.celeborn.common.metrics.source.{JVMCPUSource, JVMSource, ResourceConsumptionSource, Role, SystemMiscSource, ThreadPoolSource}
 import org.apache.celeborn.common.network.{CelebornRackResolver, TransportContext}
 import org.apache.celeborn.common.network.sasl.SaslServerBootstrap
@@ -48,6 +46,7 @@ import org.apache.celeborn.common.quota.ResourceConsumption
 import org.apache.celeborn.common.rpc._
 import org.apache.celeborn.common.rpc.{RpcSecurityContextBuilder, ServerSaslContextBuilder}
 import org.apache.celeborn.common.util.{CelebornExitKind, CollectionUtils, JavaUtils, ShutdownHookManager, SignalUtils, ThreadUtils, Utils}
+import org.apache.celeborn.service.deploy.worker.metrics.IWorkerMetricSink
 // Can Remove this if celeborn don't support scala211 in future
 import org.apache.celeborn.common.util.FunctionConverter._
 import org.apache.celeborn.server.common.{HttpService, Service}
@@ -86,6 +85,17 @@ private[celeborn] class Worker(
     JavaUtils.newConcurrentHashMap[String, UserIdentifier]()
 
   val workerStatusManager = new WorkerStatusManager(conf)
+
+  if (conf.metricCollectorClassName.nonEmpty) {
+    val sinks = Utils.loadExtensions(classOf[IWorkerMetricSink], Seq(conf.metricCollectorClassName), conf)
+    assert(sinks.nonEmpty, "A valid worker metric collector must be specified by config " +
+      s"${CelebornConf.METRIC_COLLECTOR_CLASS_NAME.key}, but ${conf.metricCollectorClassName} resulted in zero " +
+      "valid metric collector.")
+    val sink = sinks.head
+    sink.init(this)
+    metricsSystem.registerSink(sink)
+  }
+
   private val authEnabled = conf.authEnabled
   private val secretRegistry = new WorkerSecretRegistryImpl(conf.workerApplicationRegistryCacheSize)
 
