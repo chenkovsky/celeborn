@@ -3,23 +3,29 @@ package org.apache.celeborn.service.deploy.worker.metrics
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.service.deploy.worker.Worker
 
+import java.util.concurrent.TimeUnit
+
 
 class WorkerMetricSink(conf: CelebornConf) extends IWorkerMetricSink {
 
-  private var workerMetricReporter: WorkerMetricReporter = _
+  private var reporter: WorkerMetricReporter = _
 
   private var worker: Worker = _
 
+  private val pollPeriod = conf.workerHeartbeatTimeout / 4
+
+  private val pollUnit: TimeUnit = TimeUnit.SECONDS
+
   override def stop(): Unit = {
-    workerMetricReporter.stop()
+    reporter.stop()
   }
 
   override def start(): Unit = {
-    workerMetricReporter.start()
+    reporter.start(pollPeriod, pollUnit)
   }
 
   override def report(): Unit = {
-    workerMetricReporter.report()
+    reporter.report()
   }
 
   override def init(worker: Worker): Unit = {

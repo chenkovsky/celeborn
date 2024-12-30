@@ -57,16 +57,20 @@ class WorkerMetricReporter(
     }
   }
 
-  def reportTimer(timestamp: Long, name: String, timer: Timer ): Unit = {
+  override def start(period: Long, unit: TimeUnit): Unit = {
+    start(period, period, unit)
+  }
+
+  private def reportTimer(timestamp: Long, name: String, timer: Timer ): Unit = {
     val snapshot = timer.getSnapshot
     stats.put(name, snapshot.getMean.toString)
   }
 
-  def reportMeter(timestamp: Long, name: String, meter: Meter): Unit = {
+  private def reportMeter(timestamp: Long, name: String, meter: Meter): Unit = {
     stats.put(name, meter.getCount.toString)
   }
 
-  def reportHistogram(timestamp: Long, name: String, histogram: Histogram): Unit = {
+  private def reportHistogram(timestamp: Long, name: String, histogram: Histogram): Unit = {
     stats.put(name, histogram.getSnapshot.getMedian.toString)
   }
 
