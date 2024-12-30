@@ -26,6 +26,7 @@ import org.apache.celeborn.common.meta.DiskInfo;
 import org.apache.celeborn.common.meta.WorkerInfo;
 import org.apache.celeborn.common.meta.WorkerStatus;
 import org.apache.celeborn.common.quota.ResourceConsumption;
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 
 public interface IMetadataHandler {
   void handleRequestSlots(
@@ -94,4 +95,6 @@ public interface IMetadataHandler {
   void handleApplicationMeta(ApplicationMeta applicationMeta);
 
   void handleReportWorkerDecommission(List<WorkerInfo> workers, String requestId);
+
+  void handleScaleOperation(ScaleOperation scaleOperation);
 }

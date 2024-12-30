@@ -30,6 +30,9 @@ import org.apache.celeborn.common.protocol.StorageInfo;
 import org.apache.celeborn.common.quota.ResourceConsumption;
 import org.apache.celeborn.common.util.CollectionUtils;
 import org.apache.celeborn.common.util.Utils;
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
+import org.apache.celeborn.service.deploy.master.scale.ScaleType;
+import org.apache.celeborn.service.deploy.master.scale.ScalingWorker;
 
 public class MetaUtil {
   private MetaUtil() {}
@@ -167,5 +170,40 @@ public class MetaUtil {
 
   public static WorkerStatus fromPbWorkerStatus(ResourceProtos.WorkerStatus workerStatus) {
     return new WorkerStatus(workerStatus.getState().getNumber(), workerStatus.getStateStartTime(), workerStatus.getStatsMap());
+  }
+
+  public static ScaleOperation fromPbScaleOperation(ResourceProtos.ScaleOperation  scaleOperation) {
+    return new ScaleOperation(
+            scaleOperation.getLastScaleOperationEndTime(),
+            scaleOperation.getExpectedWorkerReplicaNumber(),
+            scaleOperation.getNeedRecommissionWorkersList().stream().map(MetaUtil::fromPbScalingWorker).collect(Collectors.toList()),
+            scaleOperation.getNeedDecommissionWorkersList().stream().map(MetaUtil::fromPbScalingWorker).collect(Collectors.toList()),
+            ScaleType.values()[scaleOperation.getScaleType().getNumber()]
+    );
+  }
+
+  public static ScalingWorker fromPbScalingWorker(ResourceProtos.ScalingWorker scalingWorker) {
+    return new ScalingWorker(
+            scalingWorker.getName(),
+            scalingWorker.hasWorker() ? addrToInfo(scalingWorker.getWorker()) : null
+    );
+  }
+
+  public static ResourceProtos.ScaleOperation toPbScaleOperation(ScaleOperation  scaleOperation) {
+    return ResourceProtos.ScaleOperation.newBuilder()
+            .setLastScaleOperationEndTime(scaleOperation.getLastScaleOperationEndTime())
+            .setExpectedWorkerReplicaNumber(scaleOperation.getExpectedWorkerReplicaNumber())
+                    .addAllNeedRecommissionWorkers(scaleOperation.getNeedRecommissionWorkers().stream().map(MetaUtil::toPbScalingWorker).collect(Collectors.toList()))
+                            .addAllNeedDecommissionWorkers(scaleOperation.getNeedDecommissionWorkers().stream().map(MetaUtil::toPbScalingWorker).collect(Collectors.toList()))
+                                    .setScaleType(ResourceProtos.ScaleType.forNumber(scaleOperation.getScaleType().ordinal())).build();
+  }
+
+  public static ResourceProtos.ScalingWorker toPbScalingWorker(ScalingWorker scalingWorker) {
+    ResourceProtos.ScalingWorker.Builder builder = ResourceProtos.ScalingWorker.newBuilder();
+    builder.setName(scalingWorker.getName());
+    if (scalingWorker.getWorker() != null) {
+      builder.setWorker(infoToAddr(scalingWorker.getWorker()));
+    }
+    return builder.build();
   }
 }

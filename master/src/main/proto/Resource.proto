@@ -43,6 +43,8 @@ enum Type {
   BatchUnRegisterShuffle = 28;
 
   ReviseLostShuffles = 29;
+
+  Scale = 30;
 }
 
 enum WorkerEventType {
@@ -78,6 +80,7 @@ message ResourceRequest {
   optional ReportWorkerDecommissionRequest reportWorkerDecommissionRequest = 24;
   optional BatchUnregisterShuffleRequest batchUnregisterShuffleRequest = 25;
   optional ReviseLostShufflesRequest reviseLostShufflesRequest = 102;
+  optional ScalingOperationRequest scalingOperationRequest = 103;
 }
 
 message DiskInfo {
@@ -253,4 +256,28 @@ message ApplicationMetaRequest {
 message ReviseLostShufflesRequest {
   required string appId = 1 ;
   repeated int32 lostShuffles = 2 ;
+}
+
+enum ScaleType {
+  STABILIZATION = 0;
+  SCALE_UP = 1;
+  SCALE_DOWN = 2;
+}
+
+message ScalingWorker {
+  required string name = 1;
+  optional WorkerAddress worker = 2;
+}
+
+message ScaleOperation {
+  required int64 lastScaleOperationEndTime = 1;
+  required int32 expectedWorkerReplicaNumber = 2;
+  repeated ScalingWorker needRecommissionWorkers = 3;
+  repeated ScalingWorker needDecommissionWorkers = 4;
+  required ScaleType scaleType = 5;
+}
+
+message ScalingOperationRequest{
+  required int64 time = 1;
+  required ScaleOperation operation = 2; // target replica
 }

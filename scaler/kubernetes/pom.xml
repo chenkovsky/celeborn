@@ -21,9 +21,10 @@
         <groupId>org.apache.celeborn</groupId>
         <artifactId>celeborn-parent_${scala.binary.version}</artifactId>
         <version>${project.version}</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>scaler-kubernetes</artifactId>
+    <artifactId>celeborn-scaler-kubernetes_${scala.binary.version}</artifactId>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>

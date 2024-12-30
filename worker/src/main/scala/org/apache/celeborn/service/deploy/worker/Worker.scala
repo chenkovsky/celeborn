@@ -86,7 +86,7 @@ private[celeborn] class Worker(
   val workerStatusManager = new WorkerStatusManager(conf)
 
   if (conf.metricCollectorClassName.nonEmpty) {
-    val sinks = Utils.loadExtensions(classOf[IWorkerMetricSink], Seq(conf.metricCollectorClassName), conf)
+    val sinks = Utils.loadExtensions(classOf[IWorkerMetricSink], scala.collection.immutable.Seq(conf.metricCollectorClassName), conf)
     assert(sinks.nonEmpty, "A valid worker metric collector must be specified by config " +
       s"${CelebornConf.METRIC_COLLECTOR_CLASS_NAME.key}, but ${conf.metricCollectorClassName} resulted in zero " +
       "valid metric collector.")

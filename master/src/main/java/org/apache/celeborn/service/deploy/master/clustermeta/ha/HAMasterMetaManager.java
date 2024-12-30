@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -433,6 +434,25 @@ public class HAMasterMetaManager extends AbstractMetaManager {
               .build());
     } catch (CelebornRuntimeException e) {
       LOG.error("Handle app meta for {} failed!", applicationMeta.appId(), e);
+      throw e;
+    }
+  }
+
+  @Override
+  public void handleScaleOperation(ScaleOperation scaleOperation) {
+    try {
+      ratisServer.submitRequest(
+              ResourceRequest.newBuilder()
+                      .setCmdType(Type.Scale)
+                      .setRequestId(MasterClient.genRequestId())
+                      .setScalingOperationRequest(
+                              ResourceProtos.ScalingOperationRequest.newBuilder()
+                                      .setOperation(MetaUtil.toPbScaleOperation(scaleOperation))
+                                      .setTime(System.currentTimeMillis())
+                                      .build())
+                      .build());
+    } catch (CelebornRuntimeException e) {
+      LOG.error("Handle scale operation failed!", e);
       throw e;
     }
   }

@@ -309,7 +309,10 @@ public class MetaHandler {
               decommissionList.stream().map(MetaUtil::addrToInfo).collect(Collectors.toList());
           metaSystem.updateMetaByReportWorkerDecommission(decommissionWorkers);
           break;
-
+        case Scale:
+          ResourceProtos.ScalingOperationRequest req = request.getScalingOperationRequest();
+          metaSystem.updateScaleOperation(MetaUtil.fromPbScaleOperation(req.getOperation()));
+          break;
         default:
           throw new IOException("Can not parse this command!" + request);
       }

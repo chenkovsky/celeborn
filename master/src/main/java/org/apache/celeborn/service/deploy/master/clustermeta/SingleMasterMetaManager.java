@@ -20,6 +20,7 @@ package org.apache.celeborn.service.deploy.master.clustermeta;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -184,5 +185,10 @@ public class SingleMasterMetaManager extends AbstractMetaManager {
   @Override
   public void handleReportWorkerDecommission(List<WorkerInfo> workers, String requestId) {
     updateMetaByReportWorkerDecommission(workers);
+  }
+
+  @Override
+  public void handleScaleOperation(ScaleOperation scaleOperation) {
+    updateScaleOperation(scaleOperation);
   }
 }

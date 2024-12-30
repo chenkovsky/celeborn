@@ -28,6 +28,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
 
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
+import org.apache.celeborn.service.deploy.master.scale.ScaleType;
 import scala.Option;
 import scala.Tuple2;
 
@@ -93,6 +95,7 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
   public final LongAdder partitionTotalFileCount = new LongAdder();
   public final LongAdder shuffleTotalCount = new LongAdder();
   public final Map<String, Long> shuffleFallbackCounts = JavaUtils.newConcurrentHashMap();
+  public final ScaleOperation scaleOperation = new ScaleOperation();
 
   public final ConcurrentHashMap<String, ApplicationMeta> applicationMetas =
       JavaUtils.newConcurrentHashMap();
@@ -611,6 +614,15 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
     for (String fallbackPolicy : fallbackCounts.keySet()) {
       shuffleFallbackCounts.compute(
           fallbackPolicy, (k, v) -> v == null ? fallbackCounts.get(k) : v + fallbackCounts.get(k));
+    }
+  }
+
+  public void updateScaleOperation(ScaleOperation scaleOperation) {
+    synchronized (this.scaleOperation) {
+      this.scaleOperation.setLastScaleOperationEndTime(scaleOperation.getLastScaleOperationEndTime());
+      this.scaleOperation.setScaleType(scaleOperation.getScaleType());
+      this.scaleOperation.setNeedDecommissionWorkers(scaleOperation.getNeedDecommissionWorkers());
+      this.scaleOperation.setNeedRecommissionWorkers(scaleOperation.getNeedRecommissionWorkers());
     }
   }
 }
