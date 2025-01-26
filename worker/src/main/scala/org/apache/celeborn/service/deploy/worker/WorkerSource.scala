@@ -84,6 +84,7 @@ class WorkerSource(conf: CelebornConf) extends AbstractSource(conf, Role.WORKER)
   addTimer(CLEAN_EXPIRED_SHUFFLE_KEYS_TIME)
 
   addHistogram(FETCH_CHUNK_TRANSFER_SIZE)
+  addHistogram(PARTITION_FILE_SIZE)
 
   def getCounterCount(metricsName: String): Long = {
     val metricNameWithLabel = metricNameWithCustomizedLabels(metricsName, Map.empty)
@@ -193,6 +194,7 @@ object WorkerSource {
   val SORT_TIME = "SortTime"
   val SORT_MEMORY = "SortMemory"
   val SORTING_FILES = "SortingFiles"
+  val PENDING_SORT_TASKS = "PendingSortTasks"
   val SORTED_FILES = "SortedFiles"
   val SORTED_FILE_SIZE = "SortedFileSize"
   val DISK_BUFFER = "DiskBuffer"
@@ -214,6 +216,7 @@ object WorkerSource {
   val DEVICE_OS_TOTAL_CAPACITY = "DeviceOSTotalBytes"
   val DEVICE_CELEBORN_FREE_CAPACITY = "DeviceCelebornFreeBytes"
   val DEVICE_CELEBORN_TOTAL_CAPACITY = "DeviceCelebornTotalBytes"
+  val PARTITION_FILE_SIZE = "PartitionFileSizeBytes"
 
   // congestion control
   val POTENTIAL_CONSUME_SPEED = "PotentialConsumeSpeed"

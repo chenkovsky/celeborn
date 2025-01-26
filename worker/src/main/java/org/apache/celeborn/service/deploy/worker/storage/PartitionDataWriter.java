@@ -31,8 +31,8 @@ import scala.Tuple4;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.roaringbitmap.RoaringBitmap;
@@ -102,7 +102,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
   protected final long memoryFileStorageMaxFileSize;
   protected AtomicBoolean isMemoryShuffleFile = new AtomicBoolean();
   protected final String filename;
-  protected PooledByteBufAllocator pooledByteBufAllocator;
+  protected ByteBufAllocator allocator;
   private final PartitionDataWriterContext writerContext;
   private final long localFlusherBufferSize;
   private final long hdfsFlusherBufferSize;
@@ -155,7 +155,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
     // Reduce partition data writers support memory storage now
     if (supportInMemory && createFileResult._1() != null) {
       this.memoryFileInfo = createFileResult._1();
-      this.pooledByteBufAllocator = storageManager.storageBufferAllocator();
+      this.allocator = storageManager.storageBufferAllocator();
       this.isMemoryShuffleFile.set(true);
       storageManager.registerMemoryPartitionWriter(this, createFileResult._1());
     } else if (createFileResult._2() != null) {
@@ -507,7 +507,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
     }
 
     try {
-      waitOnNoPending(numPendingWrites);
+      waitOnNoPending(numPendingWrites, false);
       closed = true;
 
       synchronized (flushLock) {
@@ -520,7 +520,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
       }
 
       tryClose.run();
-      waitOnNoPending(notifier.numPendingFlushes);
+      waitOnNoPending(notifier.numPendingFlushes, true);
     } finally {
       returnBuffer(false);
       try {
@@ -549,8 +549,10 @@ public abstract class PartitionDataWriter implements DeviceObserver {
       }
     }
     if (diskFileInfo != null) {
+      source.updateHistogram(WorkerSource.PARTITION_FILE_SIZE(), diskFileInfo.getFileLength());
       return diskFileInfo.getFileLength();
     } else {
+      source.updateHistogram(WorkerSource.PARTITION_FILE_SIZE(), memoryFileInfo.getFileLength());
       return memoryFileInfo.getFileLength();
     }
   }
@@ -580,7 +582,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
       if (memoryFileInfo != null) {
         evictInternal();
         if (isClosed()) {
-          waitOnNoPending(notifier.numPendingFlushes);
+          waitOnNoPending(notifier.numPendingFlushes, true);
           storageManager.notifyFileInfoCommitted(shuffleKey, getFile().getName(), diskFileInfo);
         }
       }
@@ -634,7 +636,8 @@ public abstract class PartitionDataWriter implements DeviceObserver {
     }
   }
 
-  protected void waitOnNoPending(AtomicInteger counter) throws IOException {
+  protected void waitOnNoPending(AtomicInteger counter, boolean failWhenTimeout)
+      throws IOException {
     long waitTime = writerCloseTimeoutMs;
     while (counter.get() > 0 && waitTime > 0) {
       try {
@@ -647,7 +650,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
       }
       waitTime -= WAIT_INTERVAL_MS;
     }
-    if (counter.get() > 0) {
+    if (counter.get() > 0 && failWhenTimeout) {
       IOException ioe = new IOException("Wait pending actions timeout, Counter: " + counter.get());
       notifier.setException(ioe);
       throw ioe;
@@ -669,7 +672,7 @@ public abstract class PartitionDataWriter implements DeviceObserver {
         flushBuffer = flusher.takeBuffer();
       } else {
         if (flushBuffer == null) {
-          flushBuffer = pooledByteBufAllocator.compositeBuffer(Integer.MAX_VALUE);
+          flushBuffer = allocator.compositeBuffer(Integer.MAX_VALUE);
         }
       }
     }

@@ -30,10 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import scala.Function0;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.CompositeByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.*;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -105,14 +102,13 @@ public class MemoryReducePartitionDataWriterSuiteJ {
     conf.set(CelebornConf.WORKER_DIRECT_MEMORY_CHECK_INTERVAL().key(), "10");
     conf.set(CelebornConf.WORKER_DIRECT_MEMORY_REPORT_INTERVAL().key(), "10");
     conf.set(CelebornConf.WORKER_READBUFFER_ALLOCATIONWAIT().key(), "10ms");
-    PooledByteBufAllocator allocator =
-        NettyUtils.getPooledByteBufAllocator(transConf, source, false);
+    ByteBufAllocator allocator = NettyUtils.getByteBufAllocator(transConf, source, false);
     storageManager = Mockito.mock(StorageManager.class);
     AtomicLong evictCount = new AtomicLong();
     Mockito.when(storageManager.evictedFileCount()).thenAnswer(a -> evictCount);
     Mockito.when(storageManager.localOrDfsStorageAvailable()).thenAnswer(a -> true);
     Mockito.when(storageManager.storageBufferAllocator()).thenAnswer(a -> allocator);
-    MemoryManager.initialize(conf, storageManager);
+    MemoryManager.initialize(conf, storageManager, null);
   }
 
   public static void setupChunkServer(FileInfo info) throws IOException {

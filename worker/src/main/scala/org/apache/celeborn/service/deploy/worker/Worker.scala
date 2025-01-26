@@ -113,6 +113,7 @@ private[celeborn] class Worker(
         workerArgs.port,
         conf,
         Math.min(64, Math.max(4, Runtime.getRuntime.availableProcessors())),
+        Role.WORKER,
         None,
         Some(workerSource))
     } else {
@@ -130,6 +131,7 @@ private[celeborn] class Worker(
         workerArgs.port,
         conf,
         Math.max(64, Runtime.getRuntime.availableProcessors()),
+        Role.WORKER,
         Some(externalSecurityContext),
         Some(workerSource))
     }
@@ -146,6 +148,7 @@ private[celeborn] class Worker(
         workerArgs.internalPort,
         conf,
         Math.min(64, Math.max(4, Runtime.getRuntime.availableProcessors())),
+        Role.WORKER,
         None,
         Some(workerSource))
     }
@@ -186,7 +189,7 @@ private[celeborn] class Worker(
 
   val storageManager = new StorageManager(conf, workerSource)
 
-  val memoryManager: MemoryManager = MemoryManager.initialize(conf, storageManager)
+  val memoryManager: MemoryManager = MemoryManager.initialize(conf, storageManager, workerSource)
   memoryManager.registerMemoryListener(storageManager)
 
   val partitionsSorter = new PartitionFilesSorter(memoryManager, conf, workerSource)
@@ -363,7 +366,7 @@ private[celeborn] class Worker(
 
   private var jvmQuake: JVMQuake = _
   if (conf.workerJvmQuakeEnabled) {
-    jvmQuake = JVMQuake.create(conf, workerInfo.toUniqueId().replace(":", "-"))
+    jvmQuake = JVMQuake.create(conf, workerInfo.toUniqueId.replace(":", "-"))
     jvmQuake.start()
   }
 
@@ -375,6 +378,9 @@ private[celeborn] class Worker(
   }
   workerSource.addGauge(WorkerSource.SORT_MEMORY) { () =>
     memoryManager.getSortMemoryCounter.get()
+  }
+  workerSource.addGauge(WorkerSource.PENDING_SORT_TASKS) { () =>
+    partitionsSorter.getPendingSortTaskCount
   }
   workerSource.addGauge(WorkerSource.SORTING_FILES) { () =>
     partitionsSorter.getSortingCount
@@ -876,7 +882,7 @@ private[celeborn] class Worker(
     val sb = new StringBuilder
     sb.append("==================== Unavailable Peers of Worker =====================\n")
     unavailablePeers.asScala.foreach { case (peer, time) =>
-      sb.append(s"${peer.toUniqueId().padTo(50, " ").mkString}${Utils.formatTimestamp(time)}\n")
+      sb.append(s"${peer.toUniqueId.padTo(50, " ").mkString}${Utils.formatTimestamp(time)}\n")
     }
     sb.toString()
   }

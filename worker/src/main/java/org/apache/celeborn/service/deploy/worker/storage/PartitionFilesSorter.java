@@ -177,8 +177,12 @@ public class PartitionFilesSorter extends ShuffleRecoverHelper {
         });
   }
 
-  public int getSortingCount() {
+  public int getPendingSortTaskCount() {
     return shuffleSortTaskDeque.size();
+  }
+
+  public int getSortingCount() {
+    return sortingShuffleFiles.values().stream().map(Set::size).reduce(Integer::sum).orElse(0);
   }
 
   public int getSortedCount() {
@@ -211,9 +215,7 @@ public class PartitionFilesSorter extends ShuffleRecoverHelper {
                   startMapIndex, endMapIndex, shuffleChunkSize, indexesMap, true),
               shuffleChunkSize);
       CompositeByteBuf targetBuffer =
-          MemoryManager.instance()
-              .getStoragePooledByteBufAllocator()
-              .compositeBuffer(Integer.MAX_VALUE);
+          MemoryManager.instance().getStorageByteBufAllocator().compositeBuffer(Integer.MAX_VALUE);
       ShuffleBlockInfoUtils.sliceSortedBufferByMapRange(
           startMapIndex,
           endMapIndex,
@@ -334,7 +336,7 @@ public class PartitionFilesSorter extends ShuffleRecoverHelper {
         // because this will affect origin buffer's reference count
         CompositeByteBuf sortedBuffer =
             MemoryManager.instance()
-                .getStoragePooledByteBufAllocator()
+                .getStorageByteBufAllocator()
                 .compositeBuffer(Integer.MAX_VALUE - 1);
         Map<Integer, List<ShuffleBlockInfo>> sortedBlocks = new TreeMap<>();
         int sortedBufferIndex = 0;

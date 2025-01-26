@@ -44,6 +44,7 @@ import org.apache.celeborn.common.client.MasterClient
 import org.apache.celeborn.common.identity.{IdentityProvider, UserIdentifier}
 import org.apache.celeborn.common.internal.Logging
 import org.apache.celeborn.common.meta.{ApplicationMeta, ShufflePartitionLocationInfo, WorkerInfo}
+import org.apache.celeborn.common.metrics.source.Role
 import org.apache.celeborn.common.network.sasl.registration.RegistrationInfo
 import org.apache.celeborn.common.protocol._
 import org.apache.celeborn.common.protocol.RpcNameConstants.WORKER_EP
@@ -63,7 +64,7 @@ object LifecycleManager {
   type ShuffleFileGroups =
     ConcurrentHashMap[Int, ConcurrentHashMap[Integer, util.Set[PartitionLocation]]]
   type ShuffleAllocatedWorkers =
-    ConcurrentHashMap[Int, ConcurrentHashMap[WorkerInfo, ShufflePartitionLocationInfo]]
+    ConcurrentHashMap[Int, ConcurrentHashMap[String, ShufflePartitionLocationInfo]]
   type ShuffleFailedWorkers = ConcurrentHashMap[WorkerInfo, (StatusCode, Long)]
 }
 
@@ -121,7 +122,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
   private val authEnabled = conf.authEnabledOnClient
   private var applicationMeta: ApplicationMeta = _
   @VisibleForTesting
-  def workerSnapshots(shuffleId: Int): util.Map[WorkerInfo, ShufflePartitionLocationInfo] =
+  def workerSnapshots(shuffleId: Int): util.Map[String, ShufflePartitionLocationInfo] =
     shuffleAllocatedWorkers.get(shuffleId)
 
   @VisibleForTesting
@@ -170,6 +171,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
     lifecycleHost,
     conf.shuffleManagerPort,
     conf,
+    Role.CLIENT,
     None)
   rpcEnv.setupEndpoint(RpcNameConstants.LIFECYCLE_MANAGER_EP, this)
 
@@ -189,6 +191,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
         lifecycleHost,
         0,
         conf,
+        Role.CLIENT,
         createRpcSecurityContext(
           appSecret,
           addClientRegistrationBootstrap = true,
@@ -200,6 +203,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
         lifecycleHost,
         0,
         conf,
+        Role.CLIENT,
         createRpcSecurityContext(appSecret))
   }
 
@@ -716,13 +720,13 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
       }
       // Forth, register shuffle success, update status
       val allocatedWorkers =
-        JavaUtils.newConcurrentHashMap[WorkerInfo, ShufflePartitionLocationInfo]()
+        JavaUtils.newConcurrentHashMap[String, ShufflePartitionLocationInfo]()
       slots.asScala.foreach { case (workerInfo, (primaryLocations, replicaLocations)) =>
-        val partitionLocationInfo = new ShufflePartitionLocationInfo()
+        val partitionLocationInfo = new ShufflePartitionLocationInfo(workerInfo)
         partitionLocationInfo.addPrimaryPartitions(primaryLocations)
         updateLatestPartitionLocations(shuffleId, primaryLocations)
         partitionLocationInfo.addReplicaPartitions(replicaLocations)
-        allocatedWorkers.put(workerInfo, partitionLocationInfo)
+        allocatedWorkers.put(workerInfo.toUniqueId, partitionLocationInfo)
       }
       shuffleAllocatedWorkers.put(shuffleId, allocatedWorkers)
       registeredShuffle.add(shuffleId)
@@ -1246,7 +1250,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
                   WORKER_EP)
               } else {
                 logInfo(
-                  s"${destroyWorkerInfo.toUniqueId()} is unavailable, set destroyWorkerInfo to null")
+                  s"${destroyWorkerInfo.toUniqueId} is unavailable, set destroyWorkerInfo to null")
                 destroyWorkerInfo = null
               }
             } catch {
@@ -1758,7 +1762,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
   }
 
   def getAllocatedWorkers(): Set[WorkerInfo] = {
-    shuffleAllocatedWorkers.asScala.values.flatMap(_.keys().asScala).toSet
+    shuffleAllocatedWorkers.asScala.values.flatMap(_.values().asScala.map(_.workerInfo)).toSet
   }
 
   // delegate workerStatusTracker to register listener

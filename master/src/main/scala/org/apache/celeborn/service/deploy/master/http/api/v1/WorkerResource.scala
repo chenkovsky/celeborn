@@ -124,7 +124,7 @@ class WorkerResource extends ApiRequestContext {
       mediaType = MediaType.APPLICATION_JSON,
       schema = new Schema(implementation = classOf[HandleResponse]))),
     description =
-      "For Master(Leader) can send worker event to manager workers. Legal types are 'None', 'Immediately', 'Decommission', 'DecommissionThenIdle', 'Graceful', 'Recommission'.")
+      "For Master(Leader) can send worker event to manager workers. Legal types are 'NONE', 'IMMEDIATELY', 'DECOMMISSION', 'DECOMMISSIONTHENIDLE', 'GRACEFUL', 'RECOMMISSION'.")
   @POST
   @Path("/events")
   def sendWorkerEvents(request: SendWorkerEventRequest): HandleResponse =
@@ -135,7 +135,7 @@ class WorkerResource extends ApiRequestContext {
       }
       val workers = request.getWorkers.asScala.map(ApiUtils.toWorkerInfo).toSeq
       val (filteredWorkers, unknownWorkers) =
-        workers.partition(w => statusSystem.workersMap.containsKey(w.toUniqueId()))
+        workers.partition(w => statusSystem.workersMap.containsKey(w.toUniqueId))
       if (filteredWorkers.isEmpty) {
         throw new BadRequestException(
           s"None of the workers are known: ${unknownWorkers.map(_.readableAddress).mkString(", ")}")
@@ -151,8 +151,8 @@ class WorkerResource extends ApiRequestContext {
       new HandleResponse().success(success).message(finalMsg)
     }
 
-  private def toWorkerEventType(enum: EventTypeEnum): WorkerEventType = {
-    enum match {
+  private def toWorkerEventType(eunmObj: EventTypeEnum): WorkerEventType = {
+    eunmObj match {
       case EventTypeEnum.NONE => WorkerEventType.None
       case EventTypeEnum.IMMEDIATELY => WorkerEventType.Immediately
       case EventTypeEnum.DECOMMISSION => WorkerEventType.Decommission

@@ -67,7 +67,7 @@
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.version>3.9.9</maven.version>
 
-    <flink.version>1.14.6</flink.version>
+    <flink.version>1.20.0</flink.version>
     <spark.version>3.3.4</spark.version>
 
     <!-- use hadoop-3 as default  -->
@@ -142,7 +142,7 @@
     <maven.plugin.protobuf.version>0.6.1</maven.plugin.protobuf.version>
     <maven.plugin.rat.version>0.13</maven.plugin.rat.version>
     <maven.plugin.resources.version>3.3.1</maven.plugin.resources.version>
-    <maven.plugin.scala.version>4.7.2</maven.plugin.scala.version>
+    <maven.plugin.scala.version>4.9.2</maven.plugin.scala.version>
     <maven.plugin.scalatest.version>2.1.0</maven.plugin.scalatest.version>
     <maven.plugin.shade.version>3.5.2</maven.plugin.shade.version>
     <maven.plugin.spotless.version>2.24.1</maven.plugin.spotless.version>
@@ -992,7 +992,6 @@
           <version>${maven.plugin.scala.version}</version>
           <configuration>
             <args>
-              <arg>-Ywarn-unused-import</arg>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
               <arg>-feature</arg>
@@ -1374,7 +1373,7 @@
       <id>spark-3.0</id>
       <modules>
         <module>client-spark/common</module>
-        <module>client-spark/spark-3</module>
+        <module>client-spark/spark-3-4</module>
         <module>client-spark/spark-3-columnar-common</module>
         <module>client-spark/spark-3-columnar-shuffle</module>
         <module>client-spark/spark-3-shaded</module>
@@ -1394,7 +1393,7 @@
       <id>spark-3.1</id>
       <modules>
         <module>client-spark/common</module>
-        <module>client-spark/spark-3</module>
+        <module>client-spark/spark-3-4</module>
         <module>client-spark/spark-3-columnar-common</module>
         <module>client-spark/spark-3-columnar-shuffle</module>
         <module>client-spark/spark-3-shaded</module>
@@ -1414,7 +1413,7 @@
       <id>spark-3.2</id>
       <modules>
         <module>client-spark/common</module>
-        <module>client-spark/spark-3</module>
+        <module>client-spark/spark-3-4</module>
         <module>client-spark/spark-3-columnar-common</module>
         <module>client-spark/spark-3-columnar-shuffle</module>
         <module>client-spark/spark-3-shaded</module>
@@ -1433,7 +1432,7 @@
       <id>spark-3.3</id>
       <modules>
         <module>client-spark/common</module>
-        <module>client-spark/spark-3</module>
+        <module>client-spark/spark-3-4</module>
         <module>client-spark/spark-3-columnar-common</module>
         <module>client-spark/spark-3-columnar-shuffle</module>
         <module>client-spark/spark-3-shaded</module>
@@ -1452,7 +1451,7 @@
       <id>spark-3.4</id>
       <modules>
         <module>client-spark/common</module>
-        <module>client-spark/spark-3</module>
+        <module>client-spark/spark-3-4</module>
         <module>client-spark/spark-3-columnar-common</module>
         <module>client-spark/spark-3-columnar-shuffle</module>
         <module>client-spark/spark-3-shaded</module>
@@ -1471,7 +1470,7 @@
       <id>spark-3.5</id>
       <modules>
         <module>client-spark/common</module>
-        <module>client-spark/spark-3</module>
+        <module>client-spark/spark-3-4</module>
         <module>client-spark/spark-3-columnar-common</module>
         <module>client-spark/spark-3.5-columnar-shuffle</module>
         <module>client-spark/spark-3-shaded</module>
@@ -1481,8 +1480,27 @@
         <lz4-java.version>1.8.0</lz4-java.version>
         <scala.version>2.12.18</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
-        <spark.version>3.5.3</spark.version>
+        <spark.version>3.5.4</spark.version>
         <zstd-jni.version>1.5.5-4</zstd-jni.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>spark-4.0</id>
+      <modules>
+        <module>client-spark/common</module>
+        <module>client-spark/spark-3-4</module>
+        <module>client-spark/spark-3-columnar-common</module>
+        <module>client-spark/spark-4-columnar-shuffle</module>
+        <module>client-spark/spark-4-shaded</module>
+        <module>tests/spark-it</module>
+      </modules>
+      <properties>
+        <lz4-java.version>1.8.0</lz4-java.version>
+        <scala.version>2.13.11</scala.version>
+        <scala.binary.version>2.13</scala.binary.version>
+        <spark.version>4.0.0-preview2</spark.version>
+        <zstd-jni.version>1.5.6-5</zstd-jni.version>
       </properties>
     </profile>
 
@@ -1647,45 +1665,6 @@
     </profile>
 
     <profile>
-      <id>flink-1.14</id>
-      <modules>
-        <module>client-flink/common</module>
-        <module>client-flink/flink-1.14</module>
-        <module>client-flink/flink-1.14-shaded</module>
-        <module>tests/flink-it</module>
-      </modules>
-      <properties>
-        <flink.version>1.14.6</flink.version>
-        <scala.binary.version>2.12</scala.binary.version>
-        <celeborn.flink.plugin.artifact>celeborn-client-flink-1.14_${scala.binary.version}</celeborn.flink.plugin.artifact>
-        <flink.streaming.artifact>flink-streaming-java_${scala.binary.version}</flink.streaming.artifact>
-        <flink.clients.artifact>flink-clients_${scala.binary.version}</flink.clients.artifact>
-        <flink.scala.artifact>flink-scala_${scala.binary.version}</flink.scala.artifact>
-        <flink.runtime.web.artifact>flink-runtime-web_${scala.binary.version}</flink.runtime.web.artifact>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>flink-1.15</id>
-      <modules>
-        <module>client-flink/common</module>
-        <module>client-flink/flink-1.15</module>
-        <module>client-flink/flink-1.15-shaded</module>
-        <module>tests/flink-it</module>
-      </modules>
-      <properties>
-        <flink.version>1.15.4</flink.version>
-        <flink.binary.version>1.15</flink.binary.version>
-        <scala.binary.version>2.12</scala.binary.version>
-        <celeborn.flink.plugin.artifact>celeborn-client-flink-1.15_${scala.binary.version}</celeborn.flink.plugin.artifact>
-        <flink.streaming.artifact>flink-streaming-java</flink.streaming.artifact>
-        <flink.clients.artifact>flink-clients</flink.clients.artifact>
-        <flink.scala.artifact>flink-scala_${scala.binary.version}</flink.scala.artifact>
-        <flink.runtime.web.artifact>flink-runtime-web</flink.runtime.web.artifact>
-      </properties>
-    </profile>
-
-    <profile>
       <id>flink-1.16</id>
       <modules>
         <module>client-flink/common</module>
@@ -1805,10 +1784,11 @@
       <id>tez</id>
       <modules>
         <module>client-tez/tez</module>
+        <module>client-tez/tez-shaded</module>
         <module>tests/tez-it</module>
       </modules>
       <properties>
-        <tez.version>0.10.3</tez.version>
+        <tez.version>0.10.2</tez.version>
       </properties>
       <dependencyManagement>
         <dependencies>

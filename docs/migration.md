@@ -23,13 +23,15 @@ license: |
 
 # Upgrading from 0.5 to 0.6
 
+- Since 0.6.0, Celeborn changed the default value of `celeborn.master.slot.assign.extraSlots` from `2` to `100`, which means Celeborn will involve more workers in offering slots.
+
 - Since 0.6.0, Celeborn deprecate `celeborn.worker.congestionControl.low.watermark`. Please use `celeborn.worker.congestionControl.diskBuffer.low.watermark` instead.
 
 - Since 0.6.0, Celeborn deprecate `celeborn.worker.congestionControl.high.watermark`. Please use `celeborn.worker.congestionControl.diskBuffer.high.watermark` instead.
 
 - Since 0.6.0, Celeborn changed the default value of `celeborn.client.spark.fetch.throwsFetchFailure` from `false` to `true`, which means Celeborn will enable spark stage rerun at default.
 
-- Since 0.6.0, Celeborn changed the default value of `celeborn.<module>.io.mode` from `NIO` to `EPOLL` if epoll mode is available, falling back to `NIO` otherwise.
+- Since 0.6.0, Celeborn changed `celeborn.<module>.io.mode` optional, of which the default value changed from `NIO` to `EPOLL` if epoll mode is available, falling back to `NIO` otherwise.
 
 - Since 0.6.0, Celeborn has introduced a new RESTful API namespace: /api/v1, which uses the application/json media type for requests and responses.
    The `celeborn-openapi-client` SDK is also available to help users interact with the new RESTful APIs.
@@ -78,6 +80,8 @@ license: |
   ```text
   topK(50, sum by (applicationId) (metrics_diskBytesWritten_Value{role="worker", applicationId!=""}))
   ```
+
+- Since 0.6.0, the out-of-dated Flink 1.14 and Flink 1.15 have been removed from the official support list.
 
 ## Upgrading from 0.5.0 to 0.5.1
 

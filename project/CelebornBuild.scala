@@ -91,6 +91,9 @@ object Dependencies {
   val protocVersion = "3.25.5"
   val protoVersion = "3.25.5"
 
+  // Tez
+  val tezVersion = "0.10.2"
+
   val apLoader = "me.bechberger" % "ap-loader-all" % apLoaderVersion
   val commonsCompress = "org.apache.commons" % "commons-compress" % commonsCompressVersion
   val commonsCrypto = "org.apache.commons" % "commons-crypto" % commonsCryptoVersion excludeAll(
@@ -135,6 +138,8 @@ object Dependencies {
     "org.fusesource.leveldbjni"
   }
   val leveldbJniAll = leveldbJniGroup % "leveldbjni-all" % leveldbJniVersion
+  val log4jApi = "org.apache.logging.log4j" % "log4j-api" % log4j2Version
+  val log4jCore = "org.apache.logging.log4j" % "log4j-core" % log4j2Version
   val log4j12Api = "org.apache.logging.log4j" % "log4j-1.2-api" % log4j2Version
   val log4jSlf4jImpl = "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4j2Version
   val lz4Java = "org.lz4" % "lz4-java" % lz4JavaVersion
@@ -212,6 +217,47 @@ object Dependencies {
   val bouncycastleBcprovJdk18on = "org.bouncycastle" % "bcprov-jdk18on" % bouncycastleVersion % "test"
   val bouncycastleBcpkixJdk18on = "org.bouncycastle" % "bcpkix-jdk18on" % bouncycastleVersion % "test"
 
+  // Tez support
+  val tezCommon = "org.apache.tez" % "tez-common" % tezVersion excludeAll(
+    ExclusionRule("org.apache.hadoop", "hadoop-annotations"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-api"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-common")
+  )
+  val tezRuntimeLibrary = "org.apache.tez" % "tez-runtime-library" % tezVersion excludeAll(
+    ExclusionRule("org.apache.hadoop", "hadoop-annotations"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-api"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-common")
+  )
+  val tezRuntimeInternals = "org.apache.tez" % "tez-runtime-internals" % tezVersion excludeAll(
+    ExclusionRule("org.apache.hadoop", "hadoop-annotations"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-api"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-common"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-client"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-server-common"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-server-web-proxy")
+  )
+  val tezDag = "org.apache.tez" % "tez-dag" % tezVersion excludeAll(
+    ExclusionRule("org.apache.hadoop", "hadoop-annotations"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-api"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-common"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-client"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-server-common"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-server-web-proxy")
+  )
+  val tezApi = "org.apache.tez" % "tez-api" % tezVersion excludeAll(
+    ExclusionRule("org.apache.hadoop", "hadoop-annotations"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-api"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-common"),
+    ExclusionRule("org.apache.hadoop", "hadoop-auth"),
+    ExclusionRule("org.apache.hadoop", "hadoop-hdfs"),
+    ExclusionRule("org.apache.hadoop", "hadoop-yarn-client")
+  )
+  val hadoopCommon = "org.apache.hadoop" % "hadoop-common" % hadoopVersion excludeAll(
+    ExclusionRule("com.sun.jersey", "jersey-json"),
+    ExclusionRule("org.apache.httpcomponents", "httpclient"),
+    ExclusionRule("org.slf4j", "slf4j-log4j12")
+  )
+
   val picocli = "info.picocli" % "picocli" % picocliVersion
 }
 
@@ -224,7 +270,8 @@ object CelebornCommonSettings {
   val SCALA_2_12_17 = "2.12.17"
   val SCALA_2_12_18 = "2.12.18"
   val scala213 = "2.13.5"
-  val ALL_SCALA_VERSIONS = Seq(SCALA_2_11_12, SCALA_2_12_10, SCALA_2_12_15, SCALA_2_12_17, SCALA_2_12_18, scala213)
+  val scala213_11 = "2.13.11"
+  val ALL_SCALA_VERSIONS = Seq(SCALA_2_11_12, SCALA_2_12_10, SCALA_2_12_15, SCALA_2_12_17, SCALA_2_12_18, scala213, scala213_11)
 
   val DEFAULT_SCALA_VERSION = SCALA_2_12_18
 
@@ -373,7 +420,12 @@ object CelebornBuild extends sbt.internal.BuildDef {
       CelebornWorker.worker,
       CelebornMaster.master,
       CelebornCli.cli
-      ) ++ maybeSparkClientModules ++ maybeFlinkClientModules ++ maybeMRClientModules ++ maybeWebModules ++ maybeCelebornMPUModule
+    ) ++ maybeSparkClientModules ++
+      maybeFlinkClientModules ++
+      maybeMRClientModules ++
+      maybeWebModules ++
+      maybeCelebornMPUModule ++
+      maybeTezClientModules
   }
 
   // ThisBuild / parallelExecution := false
@@ -419,6 +471,7 @@ object Utils {
     case Some("spark-3.3") => Some(Spark33)
     case Some("spark-3.4") => Some(Spark34)
     case Some("spark-3.5") => Some(Spark35)
+    case Some("spark-4.0") => Some(Spark40)
     case _ => None
   }
 
@@ -427,8 +480,6 @@ object Utils {
   val FLINK_VERSION = profiles.filter(_.startsWith("flink")).headOption
 
   lazy val flinkClientProjects = FLINK_VERSION match {
-    case Some("flink-1.14") => Some(Flink114)
-    case Some("flink-1.15") => Some(Flink115)
     case Some("flink-1.16") => Some(Flink116)
     case Some("flink-1.17") => Some(Flink117)
     case Some("flink-1.18") => Some(Flink118)
@@ -447,6 +498,15 @@ object Utils {
   }
 
   lazy val maybeMRClientModules: Seq[Project] = mrClientProjects.map(_.modules).getOrElse(Seq.empty)
+
+  val TEZ_VERSION = profiles.filter(_.startsWith("tez")).headOption
+
+  lazy val tezClientProjects = TEZ_VERSION match {
+    case Some("tez") => Some(TezClientProjects)
+    case _ => None
+  }
+
+  lazy val maybeTezClientModules: Seq[Project] = tezClientProjects.map(_.modules).getOrElse(Seq.empty)
 
   val WEB_VERSION = profiles.filter(_.startsWith("web")).headOption
 
@@ -629,6 +689,8 @@ object CelebornService {
         Dependencies.jettyServer,
         Dependencies.jettyServlet,
         Dependencies.jettyProxy,
+        Dependencies.log4jApi,
+        Dependencies.log4jCore,
         Dependencies.log4jSlf4jImpl % "test",
         Dependencies.log4j12Api % "test",
         Dependencies.h2 % "test",
@@ -721,7 +783,7 @@ object Spark24 extends SparkClientProjects {
 
 object Spark30 extends SparkClientProjects {
 
-  val sparkClientProjectPath = "client-spark/spark-3"
+  val sparkClientProjectPath = "client-spark/spark-3-4"
   val sparkClientProjectName = "celeborn-client-spark-3"
   val sparkClientShadedProjectPath = "client-spark/spark-3-shaded"
   val sparkClientShadedProjectName = "celeborn-client-spark-3-shaded"
@@ -735,7 +797,7 @@ object Spark30 extends SparkClientProjects {
 
 object Spark31 extends SparkClientProjects {
 
-  val sparkClientProjectPath = "client-spark/spark-3"
+  val sparkClientProjectPath = "client-spark/spark-3-4"
   val sparkClientProjectName = "celeborn-client-spark-3"
   val sparkClientShadedProjectPath = "client-spark/spark-3-shaded"
   val sparkClientShadedProjectName = "celeborn-client-spark-3-shaded"
@@ -749,7 +811,7 @@ object Spark31 extends SparkClientProjects {
 
 object Spark32 extends SparkClientProjects {
 
-  val sparkClientProjectPath = "client-spark/spark-3"
+  val sparkClientProjectPath = "client-spark/spark-3-4"
   val sparkClientProjectName = "celeborn-client-spark-3"
   val sparkClientShadedProjectPath = "client-spark/spark-3-shaded"
   val sparkClientShadedProjectName = "celeborn-client-spark-3-shaded"
@@ -763,7 +825,7 @@ object Spark32 extends SparkClientProjects {
 
 object Spark33 extends SparkClientProjects {
 
-  val sparkClientProjectPath = "client-spark/spark-3"
+  val sparkClientProjectPath = "client-spark/spark-3-4"
   val sparkClientProjectName = "celeborn-client-spark-3"
   val sparkClientShadedProjectPath = "client-spark/spark-3-shaded"
   val sparkClientShadedProjectName = "celeborn-client-spark-3-shaded"
@@ -780,7 +842,7 @@ object Spark33 extends SparkClientProjects {
 
 object Spark34 extends SparkClientProjects {
 
-  val sparkClientProjectPath = "client-spark/spark-3"
+  val sparkClientProjectPath = "client-spark/spark-3-4"
   val sparkClientProjectName = "celeborn-client-spark-3"
   val sparkClientShadedProjectPath = "client-spark/spark-3-shaded"
   val sparkClientShadedProjectName = "celeborn-client-spark-3-shaded"
@@ -794,7 +856,7 @@ object Spark34 extends SparkClientProjects {
 
 object Spark35 extends SparkClientProjects {
 
-  val sparkClientProjectPath = "client-spark/spark-3"
+  val sparkClientProjectPath = "client-spark/spark-3-4"
   val sparkClientProjectName = "celeborn-client-spark-3"
   val sparkClientShadedProjectPath = "client-spark/spark-3-shaded"
   val sparkClientShadedProjectName = "celeborn-client-spark-3-shaded"
@@ -802,10 +864,27 @@ object Spark35 extends SparkClientProjects {
   val lz4JavaVersion = "1.8.0"
   val sparkProjectScalaVersion = "2.12.18"
 
-  val sparkVersion = "3.5.3"
+  val sparkVersion = "3.5.4"
   val zstdJniVersion = "1.5.5-4"
 
   override val sparkColumnarShuffleVersion: String = "3.5"
+}
+
+object Spark40 extends SparkClientProjects {
+
+  val sparkClientProjectPath = "client-spark/spark-3-4"
+  val sparkClientProjectName = "celeborn-client-spark-4"
+  val sparkClientShadedProjectPath = "client-spark/spark-4-shaded"
+  val sparkClientShadedProjectName = "celeborn-client-spark-4-shaded"
+
+  val lz4JavaVersion = "1.8.0"
+  val sparkProjectScalaVersion = "2.13.11"
+
+  val sparkVersion = "4.0.0-preview2"
+  val zstdJniVersion = "1.5.6-5"
+  val scalaBinaryVersion = "2.13"
+
+  override val sparkColumnarShuffleVersion: String = "4"
 }
 
 trait SparkClientProjects {
@@ -996,30 +1075,6 @@ trait SparkClientProjects {
 //                   Flink Client                     //
 ////////////////////////////////////////////////////////
 
-object Flink114 extends FlinkClientProjects {
-  val flinkVersion = "1.14.6"
-
-  // note that SBT does not allow using the period symbol (.) in project names.
-  val flinkClientProjectPath = "client-flink/flink-1.14"
-  val flinkClientProjectName = "celeborn-client-flink-1_14"
-  val flinkClientShadedProjectPath: String = "client-flink/flink-1.14-shaded"
-  val flinkClientShadedProjectName: String = "celeborn-client-flink-1_14-shaded"
-
-  override lazy val flinkStreamingDependency: ModuleID = "org.apache.flink" %% "flink-streaming-java" % flinkVersion % "test"
-  override lazy val flinkClientsDependency: ModuleID = "org.apache.flink" %% "flink-clients" % flinkVersion % "test"
-  override lazy val flinkRuntimeWebDependency: ModuleID = "org.apache.flink" %% "flink-runtime-web" % flinkVersion % "test"
-}
-
-object Flink115 extends FlinkClientProjects {
-  val flinkVersion = "1.15.4"
-
-  // note that SBT does not allow using the period symbol (.) in project names.
-  val flinkClientProjectPath = "client-flink/flink-1.15"
-  val flinkClientProjectName = "celeborn-client-flink-1_15"
-  val flinkClientShadedProjectPath: String = "client-flink/flink-1.15-shaded"
-  val flinkClientShadedProjectName: String = "celeborn-client-flink-1_15-shaded"
-}
-
 object Flink116 extends FlinkClientProjects {
   val flinkVersion = "1.16.3"
 
@@ -1095,8 +1150,6 @@ trait FlinkClientProjects {
   //   1.19.1 -> 1.19
   //   1.18.1 -> 1.18
   //   1.17.2 -> 1.17
-  //   1.15.4 -> 1.15
-  //   1.14.6 -> 1.14
   lazy val flinkMajorVersion: String = flinkVersion.split("\\.").take(2).reduce(_ + "." + _)
 
   // the output would be something like: celeborn-client-flink-1.17-shaded_2.12-0.4.0-SNAPSHOT.jar
@@ -1570,4 +1623,157 @@ object WebProjects {
   def modules: Seq[Project] = {
     Seq(web)
   }
+}
+
+////////////////////////////////////////////////////////
+//                   Tez Client                        //
+////////////////////////////////////////////////////////
+object TezClientProjects {
+
+  def tezClient: Project = {
+    Project("celeborn-client-tez", file("client-tez/tez"))
+      .dependsOn(CelebornCommon.common, CelebornClient.client)
+      .settings(
+        commonSettings,
+        libraryDependencies ++= Seq(
+          Dependencies.tezCommon,
+          Dependencies.tezRuntimeLibrary,
+          Dependencies.tezRuntimeInternals,
+          Dependencies.tezDag,
+          Dependencies.tezApi,
+          Dependencies.hadoopCommon,
+          Dependencies.slf4jApi,
+        ) ++ commonUnitTestDependencies,
+        dependencyOverrides += Dependencies.commonsCompress
+      )
+  }
+
+  def tezIt: Project = {
+    Project("celeborn-tez-it", file("tests/tez-it"))
+      // ref: https://www.scala-sbt.org/1.x/docs/Multi-Project.html#Classpath+dependencies
+      .dependsOn(CelebornCommon.common % "test->test;compile->compile")
+      .dependsOn(CelebornClient.client % "test->test;compile->compile")
+      .dependsOn(CelebornMaster.master % "test->test;compile->compile")
+      .dependsOn(CelebornWorker.worker % "test->test;compile->compile")
+      .dependsOn(tezClient % "test->test;compile->compile")
+      .settings(
+        commonSettings,
+        copyDepsSettings,
+        libraryDependencies ++= Seq(
+        ) ++ commonUnitTestDependencies
+      )
+  }
+
+  def tezClientShade: Project = {
+    Project("celeborn-client-tez-shaded", file("client-tez/tez-shaded"))
+      .dependsOn(tezClient)
+      .disablePlugins(AddMetaInfLicenseFiles)
+      .settings(
+        commonSettings,
+        releaseSettings,
+
+        // align final shaded jar name with maven.
+        (assembly / assemblyJarName) := {
+          val extension = artifact.value.extension
+          s"${moduleName.value}_${scalaBinaryVersion.value}-${version.value}.$extension"
+        },
+
+        (assembly / test) := {},
+
+        (assembly / logLevel) := Level.Info,
+
+        // include `scala-library` from assembly.
+        (assembly / assemblyPackageScala / assembleArtifact) := true,
+
+        (assembly / assemblyExcludedJars) := {
+          val cp = (assembly / fullClasspath).value
+          cp filter { v =>
+            val name = v.data.getName
+            !(name.startsWith("celeborn-") ||
+              name.startsWith("protobuf-java-") ||
+              name.startsWith("guava-") ||
+              name.startsWith("failureaccess-") ||
+              name.startsWith("netty-") ||
+              name.startsWith("commons-lang3-") ||
+              name.startsWith("RoaringBitmap-") ||
+              name.startsWith("lz4-java-") ||
+              name.startsWith("zstd-jni-") ||
+              name.startsWith("metrics-core-") ||
+              name.startsWith("scala-library-"))
+          }
+        },
+
+        (assembly / assemblyShadeRules) := Seq(
+          ShadeRule.rename("com.google.protobuf.**" -> "org.apache.celeborn.shaded.com.google.protobuf.@1").inAll,
+          ShadeRule.rename("com.google.common.**" -> "org.apache.celeborn.shaded.com.google.common.@1").inAll,
+          ShadeRule.rename("io.netty.**" -> "org.apache.celeborn.shaded.io.netty.@1").inAll,
+          ShadeRule.rename("org.apache.commons.**" -> "org.apache.celeborn.shaded.org.apache.commons.@1").inAll,
+          ShadeRule.rename("org.roaringbitmap.**" -> "org.apache.celeborn.shaded.org.roaringbitmap.@1").inAll,
+          ShadeRule.rename("io.dropwizard.metrics.**" -> "org.apache.celeborn.shaded.io.dropwizard.metrics.@1").inAll,
+          ShadeRule.rename("com.codahale.metrics.**" -> "org.apache.celeborn.shaded.com.codahale.metrics.@1").inAll,
+          ShadeRule.rename("com.github.luben.**" -> "org.apache.celeborn.shaded.com.github.luben.@1").inAll,
+        ),
+
+        (assembly / assemblyMergeStrategy) := {
+          case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+          // For netty-3.x.y.Final.jar
+          case m if m.startsWith("META-INF/license/") => MergeStrategy.discard
+          // the LicenseAndNoticeMergeStrategy always picks the license/notice file from the current project
+          case m@("META-INF/LICENSE" | "META-INF/NOTICE") => CustomMergeStrategy("LicenseAndNoticeMergeStrategy") { conflicts =>
+            val entry = conflicts.head
+            val projectLicenseFile = (Compile / resourceDirectory).value / entry.target
+            val stream = () => new java.io.BufferedInputStream(new java.io.FileInputStream(projectLicenseFile))
+            Right(Vector(JarEntry(entry.target, stream)))
+          }
+          case PathList(ps@_*) if Assembly.isLicenseFile(ps.last) => MergeStrategy.discard
+          // Drop all proto files that are not needed as artifacts of the build.
+          case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+          case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/native-image") => MergeStrategy.discard
+          // Drop netty jnilib
+          case m if m.toLowerCase(Locale.ROOT).endsWith(".jnilib") => MergeStrategy.discard
+          // rename netty native lib
+          case "META-INF/native/libnetty_transport_native_epoll_x86_64.so" => CustomMergeStrategy.rename(_ => "META-INF/native/liborg_apache_celeborn_shaded_netty_transport_native_epoll_x86_64.so")
+          case "META-INF/native/libnetty_transport_native_epoll_aarch_64.so" => CustomMergeStrategy.rename(_ => "META-INF/native/liborg_apache_celeborn_shaded_netty_transport_native_epoll_aarch_64.so")
+          case _ => MergeStrategy.first
+        },
+
+        Compile / packageBin := assembly.value,
+        pomPostProcess := removeDependenciesTransformer
+      )
+  }
+
+  def modules: Seq[Project] = {
+    Seq(tezClient, tezIt, tezGroup, tezClientShade)
+  }
+
+  // for test only, don't use this group for any other projects
+  lazy val tezGroup = (project withId "celeborn-tez-group").aggregate(tezClient, tezIt)
+
+  val copyDeps = TaskKey[Unit]("copyDeps", "Copies needed dependencies to the build directory.")
+  val destPath = (Compile / crossTarget) {
+    _ / "mapreduce_lib"
+  }
+
+  lazy val copyDepsSettings = Seq(
+    copyDeps := {
+      val dest = destPath.value
+      if (!dest.isDirectory() && !dest.mkdirs()) {
+        throw new java.io.IOException("Failed to create jars directory.")
+      }
+
+      (Compile / dependencyClasspath).value.map(_.data)
+        .filter { jar => jar.isFile() }
+        .foreach { jar =>
+          val destJar = new File(dest, jar.getName())
+          if (destJar.isFile()) {
+            destJar.delete()
+          }
+          Files.copy(jar.toPath(), destJar.toPath())
+        }
+    },
+    (Test / compile) := {
+      copyDeps.value
+      (Test / compile).value
+    }
+  )
 }

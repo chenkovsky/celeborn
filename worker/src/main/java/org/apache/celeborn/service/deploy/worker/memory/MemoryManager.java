@@ -29,12 +29,13 @@ import java.util.concurrent.atomic.LongAdder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.internal.PlatformDependent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.celeborn.common.CelebornConf;
+import org.apache.celeborn.common.metrics.source.AbstractSource;
 import org.apache.celeborn.common.protocol.TransportModuleConstants;
 import org.apache.celeborn.common.util.ThreadUtils;
 import org.apache.celeborn.common.util.Utils;
@@ -95,12 +96,13 @@ public class MemoryManager {
 
   @VisibleForTesting
   public static MemoryManager initialize(CelebornConf conf) {
-    return initialize(conf, null);
+    return initialize(conf, null, null);
   }
 
-  public static MemoryManager initialize(CelebornConf conf, StorageManager storageManager) {
+  public static MemoryManager initialize(
+      CelebornConf conf, StorageManager storageManager, AbstractSource source) {
     if (_INSTANCE == null) {
-      _INSTANCE = new MemoryManager(conf, storageManager);
+      _INSTANCE = new MemoryManager(conf, storageManager, source);
     }
     return _INSTANCE;
   }
@@ -115,7 +117,7 @@ public class MemoryManager {
     return _INSTANCE;
   }
 
-  private MemoryManager(CelebornConf conf, StorageManager storageManager) {
+  private MemoryManager(CelebornConf conf, StorageManager storageManager, AbstractSource source) {
     double pausePushDataRatio = conf.workerDirectMemoryRatioToPauseReceive();
     double pauseReplicateRatio = conf.workerDirectMemoryRatioToPauseReplicate();
     this.resumeRatio = conf.workerDirectMemoryRatioToResume();
@@ -190,7 +192,7 @@ public class MemoryManager {
 
     if (readBufferThreshold > 0) {
       // if read buffer threshold is zero means that there will be no map data partitions
-      readBufferDispatcher = new ReadBufferDispatcher(this, conf);
+      readBufferDispatcher = new ReadBufferDispatcher(this, conf, source);
       readBufferTargetUpdateService.scheduleWithFixedDelay(
           () -> {
             try {
@@ -546,7 +548,7 @@ public class MemoryManager {
     readBufferDispatcher.close();
   }
 
-  public PooledByteBufAllocator getStoragePooledByteBufAllocator() {
+  public ByteBufAllocator getStorageByteBufAllocator() {
     return storageManager.storageBufferAllocator();
   }
 

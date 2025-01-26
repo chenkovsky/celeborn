@@ -539,7 +539,9 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
   def rpcDumpIntervalMs(): Long = get(RPC_SUMMARY_DUMP_INTERVAL)
 
   def networkIoMode(module: String): String = {
-    getTransportConf(module, NETWORK_IO_MODE)
+    get(
+      NETWORK_IO_MODE.key.replace("<module>", module),
+      if (Epoll.isAvailable) IOMode.EPOLL.name() else IOMode.NIO.name())
   }
 
   def networkIoPreferDirectBufs(module: String): Boolean = {
@@ -602,6 +604,9 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
 
   def networkMemoryAllocatorAllowCache: Boolean =
     get(NETWORK_MEMORY_ALLOCATOR_ALLOW_CACHE)
+
+  def networkMemoryAllocatorPooled: Boolean =
+    get(NETWORK_MEMORY_ALLOCATOR_POOLED)
 
   def networkAllocatorArenas: Int = get(NETWORK_MEMORY_ALLOCATOR_ARENAS).getOrElse(Math.max(
     Runtime.getRuntime.availableProcessors(),
@@ -1829,6 +1834,17 @@ object CelebornConf extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val NETWORK_MEMORY_ALLOCATOR_POOLED: ConfigEntry[Boolean] =
+    buildConf("celeborn.network.memory.allocator.pooled")
+      .categories("network")
+      .internal
+      .version("0.6.0")
+      .doc("If disabled, always use UnpooledByteBufAllocator for aggressive memory reclamation, " +
+        "this is helpful for cases that worker has high memory usage even after triming. " +
+        "Disabling would cause performace degression and higher CPU usage.")
+      .booleanConf
+      .createWithDefault(true)
+
   val NETWORK_MEMORY_ALLOCATOR_SHARE: ConfigEntry[Boolean] =
     buildConf("celeborn.network.memory.allocator.share")
       .categories("network")
@@ -1964,15 +1980,14 @@ object CelebornConf extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
-  val NETWORK_IO_MODE: ConfigEntry[String] =
+  val NETWORK_IO_MODE: OptionalConfigEntry[String] =
     buildConf("celeborn.<module>.io.mode")
       .categories("network")
       .doc("Netty EventLoopGroup backend, available options: NIO, EPOLL. If epoll mode is available, the default IO mode is EPOLL; otherwise, the default is NIO.")
       .stringConf
       .transform(_.toUpperCase)
       .checkValues(Set(IOMode.NIO.name(), IOMode.EPOLL.name()))
-      .createWithDefaultFunction(() =>
-        if (Epoll.isAvailable) IOMode.EPOLL.name() else IOMode.NIO.name())
+      .createOptional
 
   val NETWORK_IO_PREFER_DIRECT_BUFS: ConfigEntry[Boolean] =
     buildConf("celeborn.<module>.io.preferDirectBufs")
@@ -2930,7 +2945,7 @@ object CelebornConf extends Logging {
       .version("0.3.0")
       .doc("Extra slots number when master assign slots.")
       .intConf
-      .createWithDefault(2)
+      .createWithDefault(100)
 
   val MASTER_SLOT_ASSIGN_MAX_WORKERS: ConfigEntry[Int] =
     buildConf("celeborn.master.slot.assign.maxWorkers")
