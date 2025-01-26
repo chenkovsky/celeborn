@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
 
 import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
-import org.apache.celeborn.service.deploy.master.scale.ScaleType;
+import org.apache.celeborn.service.deploy.master.scale.ScalingWorker;
 import scala.Option;
 import scala.Tuple2;
 
@@ -619,10 +619,33 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
 
   public void updateScaleOperation(ScaleOperation scaleOperation) {
     synchronized (this.scaleOperation) {
-      this.scaleOperation.setLastScaleOperationEndTime(scaleOperation.getLastScaleOperationEndTime());
+      this.scaleOperation.setLastScaleUpEndTime(scaleOperation.getLastScaleUpEndTime());
       this.scaleOperation.setScaleType(scaleOperation.getScaleType());
       this.scaleOperation.setNeedDecommissionWorkers(scaleOperation.getNeedDecommissionWorkers());
       this.scaleOperation.setNeedRecommissionWorkers(scaleOperation.getNeedRecommissionWorkers());
+      this.scaleOperation.setLastScaleDownEndTime(scaleOperation.getLastScaleDownEndTime());
+
+      synchronized (this.workersMap) {
+        WorkerEventInfo eventInfo = new WorkerEventInfo(ResourceProtos.WorkerEventType.DecommissionThenIdle_VALUE, scaleOperation.getCurrentScaleStartTime());
+        for (ScalingWorker worker: scaleOperation.getNeedDecommissionWorkers()) {
+          if (worker.hasUniqueId()) {
+            WorkerInfo info = this.workersMap.get(worker.getUniqueId());
+            if (info != null && (info.getWorkerStatus().getState() == PbWorkerStatus.State.Normal)) {
+              workerEventInfos.put(WorkerInfo.fromUniqueId(worker.getUniqueId()),  eventInfo);
+            }
+          }
+        }
+
+        eventInfo = new WorkerEventInfo(ResourceProtos.WorkerEventType.Recommission_VALUE, scaleOperation.getCurrentScaleStartTime());
+        for (ScalingWorker worker: scaleOperation.getNeedRecommissionWorkers()) {
+          if (worker.hasUniqueId()) {
+            WorkerInfo info = this.workersMap.get(worker.getUniqueId());
+            if (info != null && (info.getWorkerStatus().getState() == PbWorkerStatus.State.InDecommissionThenIdle || info.getWorkerStatus().getState() == PbWorkerStatus.State.Idle)) {
+              workerEventInfos.put(WorkerInfo.fromUniqueId(worker.getUniqueId()),  eventInfo);
+            }
+          }
+        }
+      }
     }
   }
 }

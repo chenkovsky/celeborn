@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ScaleOperation {
-    private long lastScaleOperationEndTime = 0L;
+    private long lastScaleUpEndTime = 0L;
+    private long lastScaleDownEndTime = 0L;
+    private long currentScaleStartTime = 0L;
     private int expectedWorkerReplicaNumber = -1;
     private List<ScalingWorker> needRecommissionWorkers = new ArrayList<>();
     private List<ScalingWorker> needDecommissionWorkers = new ArrayList<>();
@@ -16,24 +18,28 @@ public class ScaleOperation {
     }
 
     public ScaleOperation(
-            long lastScaleOperationEndTime,
+            long lastScaleUpEndTime,
+            long lastScaleDownEndTime,
+            long currentScaleStartTime,
             int expectedWorkerReplicaNumber,
             List<ScalingWorker> needRecommissionWorkers,
             List<ScalingWorker> needDecommissionWorkers,
             ScaleType scaleType) {
-        this.lastScaleOperationEndTime = lastScaleOperationEndTime;
+        this.lastScaleUpEndTime = lastScaleUpEndTime;
+        this.lastScaleDownEndTime = lastScaleDownEndTime;
+        this.currentScaleStartTime = currentScaleStartTime;
         this.expectedWorkerReplicaNumber = expectedWorkerReplicaNumber;
         this.needRecommissionWorkers = needRecommissionWorkers;
         this.needDecommissionWorkers = needDecommissionWorkers;
         this.scaleType = scaleType;
     }
 
-    public long getLastScaleOperationEndTime() {
-        return lastScaleOperationEndTime;
+    public long getLastScaleUpEndTime() {
+        return lastScaleUpEndTime;
     }
 
-    public void setLastScaleOperationEndTime(long lastScaleOperationEndTime) {
-        this.lastScaleOperationEndTime = lastScaleOperationEndTime;
+    public void setLastScaleUpEndTime(long lastScaleUpEndTime) {
+        this.lastScaleUpEndTime = lastScaleUpEndTime;
     }
 
     public int getExpectedWorkerReplicaNumber() {
@@ -68,10 +74,29 @@ public class ScaleOperation {
         this.scaleType = scaleType;
     }
 
+    public long getLastScaleDownEndTime() {
+        return lastScaleDownEndTime;
+    }
+
+    public void setLastScaleDownEndTime(long time) {
+        this.lastScaleDownEndTime = time;
+    }
+
+    public long getCurrentScaleStartTime() {
+        return currentScaleStartTime;
+    }
+
+    public void setCurrentScaleStartTime(long currentScaleStartTime) {
+        this.currentScaleStartTime = currentScaleStartTime;
+    }
+
     @Override
     public String toString() {
         return new ToStringBuilder(this)
-                .append("lastScaleOperationEndTime", getLastScaleOperationEndTime())
+                .append("lastScaleUpEndTime", getLastScaleUpEndTime())
+                .append("lastScaleDownEndTime", getLastScaleDownEndTime())
+                .append("currentScaleStartTime", getCurrentScaleStartTime())
+                .append("expectedWorkerReplicaNumber", getExpectedWorkerReplicaNumber())
                 .append("needRecommissionWorkers", getNeedRecommissionWorkers())
                 .append("needDecommissionWorkers", getNeedDecommissionWorkers())
                 .append("scaleType", getScaleType())

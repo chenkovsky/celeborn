@@ -138,7 +138,7 @@ function build_service {
   # Store the command as an array because $MVN variable might have spaces in it.
   # Normal quoting tricks don't work.
   # See: http://mywiki.wooledge.org/BashFAQ/050
-  BUILD_COMMAND=("$MVN" clean package $MVN_DIST_OPT -pl master,worker,cli -am $@)
+  BUILD_COMMAND=("$MVN" clean package $MVN_DIST_OPT -pl master,worker,cli,scaler/kubernetes -am $@)
 
   # Actually build the jar
   echo -e "\nBuilding with..."
@@ -153,6 +153,7 @@ function build_service {
 
   ## Copy master jars
   cp "$PROJECT_DIR"/master/target/celeborn-master_$SCALA_VERSION-$VERSION.jar "$DIST_DIR/master-jars/"
+  cp "$PROJECT_DIR"/scaler/kubernetes/target/celeborn-scaler-kubernetes_$SCALA_VERSION-$VERSION-with-dependencies.jar "$DIST_DIR/master-jars/"
   cp "$PROJECT_DIR"/master/target/scala-$SCALA_VERSION/jars/*.jar "$DIST_DIR/jars/"
   for jar in $(ls "$PROJECT_DIR/master/target/scala-$SCALA_VERSION/jars"); do
     (cd $DIST_DIR/master-jars; ln -snf "../jars/$jar" .)

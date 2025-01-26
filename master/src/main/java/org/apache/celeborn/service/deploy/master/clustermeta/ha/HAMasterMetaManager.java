@@ -448,7 +448,6 @@ public class HAMasterMetaManager extends AbstractMetaManager {
                       .setScalingOperationRequest(
                               ResourceProtos.ScalingOperationRequest.newBuilder()
                                       .setOperation(MetaUtil.toPbScaleOperation(scaleOperation))
-                                      .setTime(System.currentTimeMillis())
                                       .build())
                       .build());
     } catch (CelebornRuntimeException e) {

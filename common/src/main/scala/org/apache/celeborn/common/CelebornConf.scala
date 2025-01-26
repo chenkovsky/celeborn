@@ -1527,6 +1527,8 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
 
   def scaleDownDiskSpaceRatio = get(SCALE_DOWN_DISK_SPACE_RATIO)
 
+  def scaleDownCpuLoad = get(SCALE_DOWN_CPU_LOAD)
+
   //  def scaleDownNetworkRatio = get(SCALE_DOWN_NETWORK_RATIO)
 
   def scaleDownStabilizationWindowInterval = get(SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL)
@@ -1540,6 +1542,8 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
   def scaleUpDirectMemoryRatio = get(SCALE_UP_DIRECT_MEMORY_RATIO)
 
   def scaleUpDiskSpaceRatio = get(SCALE_UP_DISK_SPACE_RATIO)
+
+  def scaleUpCPULoad = get(SCALE_UP_CPU_LOAD)
 
   //  def scaleUpNetworkRatio = get(SCALE_UP_NETWORK_RATIO)
 
@@ -6139,6 +6143,14 @@ object CelebornConf extends Logging {
       .doubleConf
       .createWithDefault(0.2)
 
+  val SCALE_DOWN_CPU_LOAD: ConfigEntry[Double] =
+    buildConf("celeborn.scale.up.cpuLoad")
+      .categories("worker", "scale")
+      .doc("The min CPU load, below which the number of workers will be reduced")
+      .version("0.6.0")
+      .doubleConf
+      .checkValue(v => v >= 0.0 && v <= 100, "Should be in [0.0, 100.0].")
+      .createWithDefault(50.0)
   //  val SCALE_DOWN_NETWORK_RATIO: ConfigEntry[Double] =
   //    buildConf("celeborn.scale.down.network.ratio")
   //      .categories("worker", "scale")
@@ -6182,7 +6194,7 @@ object CelebornConf extends Logging {
   val SCALE_UP_DIRECT_MEMORY_RATIO: ConfigEntry[Double] =
     buildConf("celeborn.scale.up.directMemory.ratio")
       .categories("worker", "scale")
-      .doc("The min ratio for direct memory, below which the number of workers will be reduced")
+      .doc("The max ratio for direct memory, above which the number of workers will be increased")
       .version("0.6.0")
       .doubleConf
       .createWithDefault(0.7)
@@ -6190,11 +6202,19 @@ object CelebornConf extends Logging {
   val SCALE_UP_DISK_SPACE_RATIO: ConfigEntry[Double] =
     buildConf("celeborn.scale.up.diskSpace.ratio")
       .categories("worker", "scale")
-      .doc("The min ratio for disk space, below which the number of workers will be reduced")
+      .doc("The max ratio for disk space, above which the number of workers will be increased")
       .version("0.6.0")
       .doubleConf
       .createWithDefault(0.7)
 
+  val SCALE_UP_CPU_LOAD: ConfigEntry[Double] =
+    buildConf("celeborn.scale.up.cpuLoad")
+      .categories("worker", "scale")
+      .doc("The max CPU load, above which the number of workers will be increased")
+      .version("0.6.0")
+      .doubleConf
+      .checkValue(v => v >= 0.0 && v <= 100, "Should be in [0.0, 100.0].")
+      .createWithDefault(90.0)
   //  val SCALE_UP_NETWORK_RATIO: ConfigEntry[Double] =
   //    buildConf("celeborn.scale.up.network.ratio")
   //      .categories("worker", "scale")
@@ -6241,7 +6261,7 @@ object CelebornConf extends Logging {
       .doc("The metric collector class name")
       .version("0.6.0")
       .stringConf
-      .createWithDefaultString("org.apache.celeborn.service.deploy.worker.WorkerMetricCollector")
+      .createWithDefaultString("org.apache.celeborn.service.deploy.worker.metrics.WorkerMetricSink")
 
   //  val SCALE_WORKER_BANDWIDTH: ConfigEntry[Option[Long]] =
   //    buildConf("celeborn.scale.bandwidth")
@@ -6264,6 +6284,6 @@ object CelebornConf extends Logging {
       .categories("worker", "scale")
       .version("0.6.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("1s")
+      .createWithDefaultString("5s")
 
 }

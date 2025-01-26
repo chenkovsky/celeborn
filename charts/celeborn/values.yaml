@@ -262,3 +262,6 @@ rbac:
     - apiGroups: [""]
       resources: ["pods"]
       verbs: ["create", "list", "delete"]
+    - apiGroups: [""]
+      resources: ["statefulsets"]
+      verbs: ["get", "list", "update"]

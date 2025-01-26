@@ -284,12 +284,12 @@ private[celeborn] class Master(
   }
 
   private val scaleManager = if (conf.scaleUpEnabled || conf.scaleDownEnabled) {
-    val managers = Utils.loadExtensions(classOf[IScaleManager], Seq(conf.scaleScalerClassName), conf)
+    val managers = Utils.loadExtensions(classOf[IScaleManager], scala.collection.immutable.Seq(conf.scaleScalerClassName), conf)
     assert(managers.nonEmpty, "A valid scale manager must be specified by config " +
       s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
       "valid scale manager.")
     val manager = managers.head
-    manager.init(this.statusSystem)
+    manager.init(this)
     Some(manager)
   } else {
     None

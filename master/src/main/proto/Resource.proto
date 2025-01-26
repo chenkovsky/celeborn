@@ -266,18 +266,19 @@ enum ScaleType {
 
 message ScalingWorker {
   required string name = 1;
-  optional WorkerAddress worker = 2;
+  optional string uniqueId = 2;
 }
 
 message ScaleOperation {
-  required int64 lastScaleOperationEndTime = 1;
-  required int32 expectedWorkerReplicaNumber = 2;
-  repeated ScalingWorker needRecommissionWorkers = 3;
-  repeated ScalingWorker needDecommissionWorkers = 4;
-  required ScaleType scaleType = 5;
+  required int64 lastScaleUpEndTime = 1;
+  required int64 lastScaleDownEndTime = 2;
+  required int64 currentScaleStartTime = 3;
+  required int32 expectedWorkerReplicaNumber = 4;
+  repeated ScalingWorker needRecommissionWorkers = 5;
+  repeated ScalingWorker needDecommissionWorkers = 6;
+  required ScaleType scaleType = 7;
 }
 
 message ScalingOperationRequest{
-  required int64 time = 1;
-  required ScaleOperation operation = 2; // target replica
+  required ScaleOperation operation = 1;
 }

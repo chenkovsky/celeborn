@@ -69,15 +69,20 @@ private[celeborn] class Worker(
   override val metricsSystem: MetricsSystem =
     MetricsSystem.createMetricsSystem(serviceName, conf)
   val workerSource = new WorkerSource(conf)
+  val jvmResource = new JVMSource(conf, Role.WORKER)
+  val jvmCPUResource = new JVMCPUSource(conf, Role.WORKER)
+  val systemMiscSource = new SystemMiscSource(conf, Role.WORKER)
+
   val resourceConsumptionSource =
     new ResourceConsumptionSource(conf, Role.WORKER)
   private val threadPoolSource = ThreadPoolSource(conf, Role.WORKER)
+
   metricsSystem.registerSource(workerSource)
   metricsSystem.registerSource(threadPoolSource)
   metricsSystem.registerSource(resourceConsumptionSource)
-  metricsSystem.registerSource(new JVMSource(conf, Role.WORKER))
-  metricsSystem.registerSource(new JVMCPUSource(conf, Role.WORKER))
-  metricsSystem.registerSource(new SystemMiscSource(conf, Role.WORKER))
+  metricsSystem.registerSource(jvmResource)
+  metricsSystem.registerSource(jvmCPUResource)
+  metricsSystem.registerSource(systemMiscSource)
 
   private val topResourceConsumptionCount = conf.metricsWorkerAppTopResourceConsumptionCount
   private val topApplicationUserIdentifiers =
@@ -459,6 +464,11 @@ private[celeborn] class Worker(
   }
   workerSource.addGauge(WorkerSource.CLEAN_TASK_QUEUE_SIZE) { () =>
     cleanTaskQueue.size()
+  }
+
+  workerSource.addGauge(WorkerSource.DISK_USAGE_RATIO) {() =>
+    val disks = workerInfo.diskInfos.asScala.values
+    disks.map(_.actualUsableSpace).sum.toDouble / disks.map(_.totalSpace).sum
   }
 
   private def highWorkload: Boolean = {

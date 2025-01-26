@@ -17,10 +17,10 @@
 
 package org.apache.celeborn.service.deploy.master.scale;
 
-import org.apache.celeborn.service.deploy.master.clustermeta.AbstractMetaManager;
+import org.apache.celeborn.service.deploy.master.Master;
 
 public interface IScaleManager {
-    void init(AbstractMetaManager statusSystem);
+    void init(Master master);
     void run();
     void stop();
 }
