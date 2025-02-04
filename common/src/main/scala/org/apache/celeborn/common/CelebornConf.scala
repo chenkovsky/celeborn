@@ -1517,51 +1517,51 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
   //                     Auto Scaler                     //
   // //////////////////////////////////////////////////////
 
-  def minScaleWorkerNum = get(MIN_SCALE_WORKER_NUM)
+  def minScaleWorkerNum: Int = get(MIN_SCALE_WORKER_NUM)
 
-  def maxScaleWorkerNum = get(MAX_SCALE_WORKER_NUM)
+  def maxScaleWorkerNum: Option[Int] = get(MAX_SCALE_WORKER_NUM)
 
-  def scaleDownEnabled = get(SCALE_DOWN_ENABLED)
+  def scaleDownEnabled: Boolean = get(SCALE_DOWN_ENABLED)
 
-  def scaleDownDirectMemoryRatio = get(SCALE_DOWN_DIRECT_MEMORY_RATIO)
+  def scaleDownDirectMemoryRatio: Double = get(SCALE_DOWN_DIRECT_MEMORY_RATIO)
 
-  def scaleDownDiskSpaceRatio = get(SCALE_DOWN_DISK_SPACE_RATIO)
+  def scaleDownDiskSpaceRatio: Double = get(SCALE_DOWN_DISK_SPACE_RATIO)
 
-  def scaleDownCpuLoad = get(SCALE_DOWN_CPU_LOAD)
+  def scaleDownCpuLoad: Double = get(SCALE_DOWN_CPU_LOAD)
 
   //  def scaleDownNetworkRatio = get(SCALE_DOWN_NETWORK_RATIO)
 
-  def scaleDownStabilizationWindowInterval = get(SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL)
+  def scaleDownStabilizationWindowInterval: Long = get(SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL)
 
-  def scaleDownPolicyStepNumber = get(SCALE_DOWN_POLICY_STEP_NUMBER)
+  def scaleDownPolicyStepNumber: Int = get(SCALE_DOWN_POLICY_STEP_NUMBER)
 
-  def scaleDownPolicyPercent = get(SCALE_DOWN_POLICY_PERCENT)
+  def scaleDownPolicyPercent: Option[Double] = get(SCALE_DOWN_POLICY_PERCENT)
 
-  def scaleUpEnabled = get(SCALE_UP_ENABLED)
+  def scaleUpEnabled: Boolean = get(SCALE_UP_ENABLED)
 
-  def scaleUpDirectMemoryRatio = get(SCALE_UP_DIRECT_MEMORY_RATIO)
+  def scaleUpDirectMemoryRatio: Double = get(SCALE_UP_DIRECT_MEMORY_RATIO)
 
-  def scaleUpDiskSpaceRatio = get(SCALE_UP_DISK_SPACE_RATIO)
+  def scaleUpDiskSpaceRatio: Double = get(SCALE_UP_DISK_SPACE_RATIO)
 
-  def scaleUpCPULoad = get(SCALE_UP_CPU_LOAD)
+  def scaleUpCPULoad: Double = get(SCALE_UP_CPU_LOAD)
 
   //  def scaleUpNetworkRatio = get(SCALE_UP_NETWORK_RATIO)
 
-  def scaleUpStabilizationWindowInterval = get(SCALE_UP_STABILIZATION_WINDOW_INTERVAL)
+  def scaleUpStabilizationWindowInterval: Long = get(SCALE_UP_STABILIZATION_WINDOW_INTERVAL)
 
-  def scaleUpPolicyStepNumber = get(SCALE_UP_POLICY_STEP_NUMBER)
+  def scaleUpPolicyStepNumber: Int = get(SCALE_UP_POLICY_STEP_NUMBER)
 
-  def scaleUpPolicyPercent = get(SCALE_UP_POLICY_PERCENT)
+  def scaleUpPolicyPercent: Option[Double] = get(SCALE_UP_POLICY_PERCENT)
 
-  def scaleScalerClassName = get(SCALE_SCALER_CLASS_NAME)
+  def scaleScalerClassName: String = get(SCALE_SCALER_CLASS_NAME)
 
-  def metricCollectorClassName = get(METRIC_COLLECTOR_CLASS_NAME)
+  def metricCollectorClassName: String = get(METRIC_COLLECTOR_CLASS_NAME)
 
   //  def scaleWorkerBandwidth = get(SCALE_WORKER_BANDWIDTH)
 
-  def scaleSlidingWindowSize = get(SCALE_SLIDINGWINDOW_SIZE)
+  def scaleSlidingWindowSize: Int = get(SCALE_SLIDINGWINDOW_SIZE)
 
-  def scaleCheckInterval = get(SCALE_CHECK_INTERVAL)
+  def scaleCheckInterval: Long = get(SCALE_CHECK_INTERVAL)
 
 }
 
@@ -6144,7 +6144,7 @@ object CelebornConf extends Logging {
       .createWithDefault(0.2)
 
   val SCALE_DOWN_CPU_LOAD: ConfigEntry[Double] =
-    buildConf("celeborn.scale.up.cpuLoad")
+    buildConf("celeborn.scale.down.cpuLoad")
       .categories("worker", "scale")
       .doc("The min CPU load, below which the number of workers will be reduced")
       .version("0.6.0")

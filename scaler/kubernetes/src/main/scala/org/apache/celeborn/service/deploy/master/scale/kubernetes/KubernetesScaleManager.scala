@@ -7,8 +7,9 @@ import org.apache.celeborn.common.meta.WorkerInfo
 import org.apache.celeborn.common.metrics.source.WorkerMetrics
 import org.apache.celeborn.common.protocol.PbWorkerStatus
 import org.apache.celeborn.common.util.ThreadUtils
+import org.apache.celeborn.server.common.service.config.ConfigService
 import org.apache.celeborn.service.deploy.master.Master
-import org.apache.celeborn.service.deploy.master.scale.{IScaleManager, ScaleOperation, ScaleType, ScalingWorker}
+import org.apache.celeborn.service.deploy.master.scale.{IScaleManager, ScaleOperation, ScaleRequest, ScaleType, ScalingWorker}
 
 import scala.collection.JavaConverters._
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
@@ -17,26 +18,28 @@ import java.util
 class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logging {
 
   protected val checkInterval: Long = conf.scaleCheckInterval
-  protected val minWorkerNum: Int = conf.minScaleWorkerNum
-  protected val maxWorkerNum: Option[Int] = conf.maxScaleWorkerNum
 
-  protected val scaleDownEnabled: Boolean = conf.scaleDownEnabled
-  protected val scaleDownDirectMemoryRatio: Double = conf.scaleDownDirectMemoryRatio
-  protected val scaleDownDiskSpaceRatio: Double = conf.scaleDownDiskSpaceRatio
-  protected val scaleDownCpuLoad: Double = conf.scaleDownCpuLoad
-  protected val scaleDownStabilizationWindowInterval: Long = conf.scaleDownStabilizationWindowInterval
-  protected val scaleDownPolicyStepNumber: Int = conf.scaleDownPolicyStepNumber
-  protected val scaleDownPolicyPercent: Option[Double] = conf.scaleDownPolicyPercent
+  protected def configService: ConfigService = master.configService
+  protected def minWorkerNum: Int = configService.getCelebornConf.minScaleWorkerNum
+  protected def maxWorkerNum: Option[Int] = configService.getCelebornConf.maxScaleWorkerNum
 
-  protected val scaleUpEnabled: Boolean = conf.scaleUpEnabled
-  protected val scaleUpDirectMemoryRatio: Double = conf.scaleUpDirectMemoryRatio
-  protected val scaleUpDiskSpaceRatio: Double = conf.scaleUpDiskSpaceRatio
-  protected val scaleUpCPULoad: Double = conf.scaleUpCPULoad
-  protected val scaleUpStabilizationWindowInterval: Long = conf.scaleUpStabilizationWindowInterval
-  protected val scaleUpPolicyStepNumber: Int = conf.scaleUpPolicyStepNumber
-  protected val scaleUpPolicyPercent: Option[Double] = conf.scaleUpPolicyPercent
+  protected def scaleDownEnabled: Boolean = configService.getCelebornConf.scaleDownEnabled
+  protected def scaleDownDirectMemoryRatio: Double = configService.getCelebornConf.scaleDownDirectMemoryRatio
+  protected def scaleDownDiskSpaceRatio: Double = configService.getCelebornConf.scaleDownDiskSpaceRatio
+  protected def scaleDownCpuLoad: Double = configService.getCelebornConf.scaleDownCpuLoad
+  protected def scaleDownStabilizationWindowInterval: Long = configService.getCelebornConf.scaleDownStabilizationWindowInterval
+  protected def scaleDownPolicyStepNumber: Int = configService.getCelebornConf.scaleDownPolicyStepNumber
+  protected def scaleDownPolicyPercent: Option[Double] = configService.getCelebornConf.scaleDownPolicyPercent
 
-  protected val operator = new KubernetesOperator()
+  protected def scaleUpEnabled: Boolean = configService.getCelebornConf.scaleUpEnabled
+  protected def scaleUpDirectMemoryRatio: Double = configService.getCelebornConf.scaleUpDirectMemoryRatio
+  protected def scaleUpDiskSpaceRatio: Double = configService.getCelebornConf.scaleUpDiskSpaceRatio
+  protected def scaleUpCPULoad: Double = configService.getCelebornConf.scaleUpCPULoad
+  protected def scaleUpStabilizationWindowInterval: Long = configService.getCelebornConf.scaleUpStabilizationWindowInterval
+  protected def scaleUpPolicyStepNumber: Int = configService.getCelebornConf.scaleUpPolicyStepNumber
+  protected def scaleUpPolicyPercent: Option[Double] = configService.getCelebornConf.scaleUpPolicyPercent
+
+  protected val operator: KubernetesOperator = new KubernetesOperatorImpl()
   protected var master: Master = _
   protected var scheduler: ScheduledExecutorService = _
 
@@ -118,7 +121,36 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     ScaleType.STABILIZATION
   }
 
+  // sometimes user may manually scale replicas, check it.
+  protected def checkReplicas(): Unit = {
+    logInfo("check replicas")
+    val podList = operator.workerPodList()
+    val prevOperation = master.statusSystem.scaleOperation
+    val newOperation = prevOperation.synchronized {
+      if (prevOperation.getScaleType == ScaleType.STABILIZATION && prevOperation.getExpectedWorkerReplicaNumber != podList.getItems.size()) {
+        Some(new ScaleOperation(
+          prevOperation.getLastScaleUpEndTime,
+          prevOperation.getLastScaleDownEndTime,
+          prevOperation.getCurrentScaleStartTime,
+          podList.getItems.size(),
+          prevOperation.getNeedRecommissionWorkers,
+          prevOperation.getNeedDecommissionWorkers,
+          prevOperation.getScaleType
+        ))
+      } else {
+        None
+      }
+    }
+    newOperation match {
+      case Some(operation) =>
+        master.statusSystem.handleScaleOperation(operation)
+        logInfo(s"The expectedWorkerReplicaNumber was changed to cluster replicas ${operation.getExpectedWorkerReplicaNumber}")
+      case _ =>
+    }
+  }
+
   protected def checkPreviousScalingOperation(): Unit = {
+    logInfo("check previous scaling operation")
     val workersMap = master.statusSystem.workersMap
     val prevOperation = master.statusSystem.scaleOperation
     val podList = operator.workerPodList()
@@ -184,7 +216,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   protected def checkRecommission(podNameToPods: Map[String, Pod], workersMap: util.Map[String, WorkerInfo], prevOperation: ScaleOperation): Option[List[ScalingWorker]] = {
     val idleWorkers = workersMap.asScala.values.filter{ worker =>
       worker.workerStatus.getState == PbWorkerStatus.State.Idle || worker.workerStatus.getState == PbWorkerStatus.State.InDecommissionThenIdle
-    }.map(_.toUniqueId()).toSet
+    }.map(_.toUniqueId).toSet
 
     val recommissionWorkers = prevOperation.getNeedRecommissionWorkers.asScala.filter { scalingWorker =>
       podNameToPods.get(scalingWorker.getName) match {
@@ -193,7 +225,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
             idleWorkers.contains(scalingWorker.getUniqueId)
           } else {
             // for new created pods, now it's available
-            pod.getStatus.getPhase != KubernetesOperator.POD_PHASE_PENDING
+            pod.getStatus.getPhase != KubernetesOperatorImpl.POD_PHASE_PENDING
           }
         }
         case None => true
@@ -229,7 +261,8 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     Some(decommissionWorkers)
   }
 
-  protected def tryScale() = {
+  protected def tryScale(): Unit = {
+    logInfo("try scale")
     val podList = operator.workerPodList()
     val podNameToPods = podList.getItems.asScala.map(p => (p.getMetadata.getName, p)).toMap
 
@@ -242,7 +275,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     val (newOperation, scaleReplicas) = prevOperation.synchronized {
       val (scaleType, expectedWorkerReplicaNumber) = workersMap.synchronized {
         val availableWorkerNum = availableWorkers.size()
-        val availableWorkerInfos = availableWorkers.asScala.map(w => workersMap.get(w.toUniqueId())).toSet
+        val availableWorkerInfos = availableWorkers.asScala.map(w => workersMap.get(w.toUniqueId)).toSet
         val scaleType = this.scaleType(availableWorkerInfos) match {
           case ScaleType.SCALE_UP =>
             if (prevOperation.getScaleType == ScaleType.SCALE_UP) {
@@ -267,11 +300,11 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
           case _ => ScaleType.STABILIZATION
         }
         val expectedWorkerReplicaNumber = scaleType match {
-          case ScaleType.SCALE_UP => prevOperation.getExpectedWorkerReplicaNumber +  scaleUpNum(availableWorkerNum)
+          case ScaleType.SCALE_UP => prevOperation.getExpectedWorkerReplicaNumber + scaleUpNum(availableWorkerNum)
           case ScaleType.SCALE_DOWN => prevOperation.getExpectedWorkerReplicaNumber - scaleDownNum(availableWorkerNum)
           case _ => prevOperation.getExpectedWorkerReplicaNumber
         }
-        val realScaleType =  if (expectedWorkerReplicaNumber > prevOperation.getExpectedWorkerReplicaNumber) {
+        val realScaleType = if (expectedWorkerReplicaNumber > prevOperation.getExpectedWorkerReplicaNumber) {
           ScaleType.SCALE_UP
         } else if (expectedWorkerReplicaNumber < prevOperation.getExpectedWorkerReplicaNumber) {
           ScaleType.SCALE_DOWN
@@ -305,8 +338,8 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
         val executeScaleUp = expectedWorkerReplicaNumber > podList.getItems.size()
 
         val (idleWorkerUniqueIds, normalWorkerUniqueIds) = workersMap.synchronized {
-          val idleWorkers = workersMap.asScala.values.filter(worker => worker.getWorkerStatus().getState == PbWorkerStatus.State.InDecommissionThenIdle || worker.getWorkerStatus().getState == PbWorkerStatus.State.Idle).map(_.toUniqueId()).toList
-          val normalWorkers = workersMap.asScala.values.filter(_.getWorkerStatus().getState == PbWorkerStatus.State.Normal).map(_.toUniqueId()).toList
+          val idleWorkers = workersMap.asScala.values.filter(worker => worker.getWorkerStatus().getState == PbWorkerStatus.State.InDecommissionThenIdle || worker.getWorkerStatus().getState == PbWorkerStatus.State.Idle).map(_.toUniqueId).toList
+          val normalWorkers = workersMap.asScala.values.filter(_.getWorkerStatus().getState == PbWorkerStatus.State.Normal).map(_.toUniqueId).toList
           (idleWorkers, normalWorkers)
         }
 
@@ -357,7 +390,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     if (!scaleUpEnabled && !scaleDownEnabled) {
       return
     }
-
+    checkReplicas()
     checkPreviousScalingOperation()
     tryScale()
   }
@@ -380,5 +413,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
 
   override def stop(): Unit = {
     scheduler.shutdown()
+  }
+
+  override def request(request: ScaleRequest): Long = {
+    0L
   }
 }

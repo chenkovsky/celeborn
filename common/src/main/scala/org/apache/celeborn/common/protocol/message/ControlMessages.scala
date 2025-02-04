@@ -204,7 +204,8 @@ object ControlMessages extends Logging {
   case class RequestSlotsResponse(
       status: StatusCode,
       workerResource: WorkerResource,
-      packed: Boolean = false)
+      packed: Boolean = false,
+      retryAfter: Long = 0L)
     extends MasterMessage
 
   object Revive {
@@ -701,9 +702,10 @@ object ControlMessages extends Logging {
         .setStatus(status.getValue).build().toByteArray
       new TransportMessage(MessageType.RELEASE_SLOTS_RESPONSE, payload)
 
-    case RequestSlotsResponse(status, workerResource, packed) =>
+    case RequestSlotsResponse(status, workerResource, packed, retryAfter) =>
       val builder = PbRequestSlotsResponse.newBuilder()
         .setStatus(status.getValue)
+        .setRetryAfter(retryAfter)
       if (!workerResource.isEmpty) {
         if (packed) {
           builder.putAllPackedWorkerResource(PbSerDeUtils.toPbPackedWorkerResource(workerResource))
@@ -1126,7 +1128,9 @@ object ControlMessages extends Logging {
           }
         RequestSlotsResponse(
           Utils.toStatusCode(pbRequestSlotsResponse.getStatus),
-          workerResource)
+          workerResource,
+          retryAfter=pbRequestSlotsResponse.getRetryAfter
+        )
 
       case CHANGE_LOCATION_VALUE =>
         PbRevive.parseFrom(message.getPayload)

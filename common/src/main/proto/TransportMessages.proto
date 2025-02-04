@@ -315,6 +315,7 @@ message PbRequestSlotsResponse {
   int32 status = 1;
   map<string, PbWorkerResource> workerResource = 2;
   map<string, PbPackedWorkerResource> packedWorkerResource = 3;
+  int64 retryAfter = 4;
 }
 
 message PbRevivePartitionInfo {

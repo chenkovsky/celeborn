@@ -51,7 +51,7 @@ import org.apache.celeborn.server.common.{HttpService, Service}
 import org.apache.celeborn.service.deploy.master.clustermeta.SingleMasterMetaManager
 import org.apache.celeborn.service.deploy.master.clustermeta.ha.{HAHelper, HAMasterMetaManager, MetaHandler}
 import org.apache.celeborn.service.deploy.master.quota.QuotaManager
-import org.apache.celeborn.service.deploy.master.scale.IScaleManager
+import org.apache.celeborn.service.deploy.master.scale.{IScaleManager, ScaleRequest}
 import org.apache.celeborn.service.deploy.master.tags.TagsManager
 
 private[celeborn] class Master(
@@ -283,7 +283,7 @@ private[celeborn] class Master(
     statusSystem.decommissionWorkers.size()
   }
 
-  private val scaleManager = if (conf.scaleUpEnabled || conf.scaleDownEnabled) {
+  private val scaleManager = if (conf.scaleScalerClassName.nonEmpty) {
     val managers = Utils.loadExtensions(classOf[IScaleManager], scala.collection.immutable.Seq(conf.scaleScalerClassName), conf)
     assert(managers.nonEmpty, "A valid scale manager must be specified by config " +
       s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
@@ -886,12 +886,11 @@ private[celeborn] class Master(
         RequestSlotsResponse(StatusCode.WORKER_EXCLUDED, new WorkerResource(), requestSlots.packed))
     }
 
-    val numWorkers = Math.min(
-      Math.max(
-        if (requestSlots.shouldReplicate) 2 else 1,
-        if (requestSlots.maxWorkers <= 0) slotsAssignMaxWorkers
-        else Math.min(slotsAssignMaxWorkers, requestSlots.maxWorkers)),
-      numAvailableWorkers)
+    val numRequestedWorkers = Math.max(
+      if (requestSlots.shouldReplicate) 2 else 1,
+      if (requestSlots.maxWorkers <= 0) slotsAssignMaxWorkers
+      else Math.min(slotsAssignMaxWorkers, requestSlots.maxWorkers))
+    val numWorkers = Math.min(numRequestedWorkers, numAvailableWorkers)
     val startIndex = Random.nextInt(numAvailableWorkers)
     val selectedWorkers = new util.ArrayList[WorkerInfo](numWorkers)
     selectedWorkers.addAll(availableWorkers.subList(
@@ -938,10 +937,18 @@ private[celeborn] class Master(
     // reply false if offer slots failed
     if (slots == null || slots.isEmpty) {
       logError(s"Offer slots for $numReducers reducers of $shuffleKey failed!")
+      val retryAfter = scaleManager match {
+        case Some(manager) => manager.request(new ScaleRequest(
+          requestSlots.userIdentifier.toString,
+          requestSlots.tagsExpr,
+          numRequestedWorkers - numAvailableWorkers
+        ))
+        case _ => 0L
+      }
       context.reply(RequestSlotsResponse(
         StatusCode.SLOT_NOT_AVAILABLE,
         new WorkerResource(),
-        requestSlots.packed))
+        requestSlots.packed, retryAfter))
       return
     }
 
@@ -1243,7 +1250,17 @@ private[celeborn] class Master(
   }
 
   private def handleCheckWorkersAvailable(context: RpcCallContext): Unit = {
-    context.reply(CheckWorkersAvailableResponse(!statusSystem.availableWorkers.isEmpty))
+    val available: Boolean = statusSystem.workersMap.synchronized {
+      var available: Boolean = !statusSystem.availableWorkers.isEmpty
+      if (conf.scaleUpEnabled) {
+        available = available || (conf.maxScaleWorkerNum match {
+          case Some(num) => statusSystem.scaleOperation.getExpectedWorkerReplicaNumber < num
+          case None => true
+        })
+      }
+      available
+    }
+    context.reply(CheckWorkersAvailableResponse(available))
   }
 
   private def handleWorkerEvent(

@@ -23,4 +23,5 @@ public interface IScaleManager {
     void init(Master master);
     void run();
     void stop();
+    long request(ScaleRequest request);
 }

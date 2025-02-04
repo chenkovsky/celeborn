@@ -8,7 +8,7 @@ class JVMCPUSourceSuite extends CelebornFunSuite {
     val conf = new CelebornConf()
 
     val source = new JVMCPUSource(conf, Role.WORKER)
-    val res = source.getMetrics()
+    val res = source.getMetrics
     assert(res.contains("JVMCPULoad_Value"))
   }
 }
