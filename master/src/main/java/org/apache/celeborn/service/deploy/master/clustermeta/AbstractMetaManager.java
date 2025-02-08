@@ -624,6 +624,7 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
       this.scaleOperation.setNeedDecommissionWorkers(scaleOperation.getNeedDecommissionWorkers());
       this.scaleOperation.setNeedRecommissionWorkers(scaleOperation.getNeedRecommissionWorkers());
       this.scaleOperation.setLastScaleDownEndTime(scaleOperation.getLastScaleDownEndTime());
+      this.scaleOperation.setExpectedWorkerReplicaNumber(scaleOperation.getExpectedWorkerReplicaNumber());
 
       synchronized (this.workersMap) {
         WorkerEventInfo eventInfo = new WorkerEventInfo(ResourceProtos.WorkerEventType.DecommissionThenIdle_VALUE, scaleOperation.getCurrentScaleStartTime());
@@ -647,5 +648,9 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
         }
       }
     }
+  }
+
+  public int isMasterActive() {
+    return 1;
   }
 }

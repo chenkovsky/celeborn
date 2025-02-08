@@ -8,7 +8,7 @@ import org.apache.celeborn.common.metrics.source.WorkerMetrics
 import org.apache.celeborn.common.protocol.PbWorkerStatus
 import org.apache.celeborn.common.util.ThreadUtils
 import org.apache.celeborn.server.common.service.config.ConfigService
-import org.apache.celeborn.service.deploy.master.Master
+import org.apache.celeborn.service.deploy.master.clustermeta.AbstractMetaManager
 import org.apache.celeborn.service.deploy.master.scale.{IScaleManager, ScaleOperation, ScaleRequest, ScaleType, ScalingWorker}
 
 import scala.collection.JavaConverters._
@@ -19,7 +19,6 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
 
   protected val checkInterval: Long = conf.scaleCheckInterval
 
-  protected def configService: ConfigService = master.configService
   protected def minWorkerNum: Int = configService.getCelebornConf.minScaleWorkerNum
   protected def maxWorkerNum: Option[Int] = configService.getCelebornConf.maxScaleWorkerNum
 
@@ -39,19 +38,24 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   protected def scaleUpPolicyStepNumber: Int = configService.getCelebornConf.scaleUpPolicyStepNumber
   protected def scaleUpPolicyPercent: Option[Double] = configService.getCelebornConf.scaleUpPolicyPercent
 
-  protected val operator: KubernetesOperator = new KubernetesOperatorImpl()
-  protected var master: Master = _
+  protected val operator: KubernetesOperator = createKubernetesOperator()
+
+  protected def createKubernetesOperator(): KubernetesOperator = new KubernetesOperatorImpl()
+
+  protected var configService: ConfigService = _
+  protected var statusSystem: AbstractMetaManager = _
   protected var scheduler: ScheduledExecutorService = _
 
-  protected def isMasterActive = master.isMasterActive == 1
+  protected def isMasterActive: Boolean = statusSystem.isMasterActive == 1
 
-  override def init(master: Master): Unit = {
-    this.master = master
+  override def init(configService: ConfigService, statusSystem: AbstractMetaManager): Unit = {
+    this.configService = configService
+    this.statusSystem = statusSystem
   }
 
   protected def scaleUpNum(workerNum: Int): Int = {
     val num = scaleUpPolicyPercent match {
-      case Some(p) => (workerNum * p).toInt
+      case Some(p) => (workerNum * p).ceil.toInt
       case None => scaleUpPolicyStepNumber
     }
     if (maxWorkerNum.isEmpty) {
@@ -63,7 +67,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
 
   protected def scaleDownNum(workerNum: Int): Int = {
     val num = scaleDownPolicyPercent match {
-      case Some(p) => (workerNum * p).toInt
+      case Some(p) => (workerNum * p).ceil.toInt
       case None => scaleDownPolicyStepNumber
     }
     Math.max(Math.min(num, workerNum - minWorkerNum), 0)
@@ -117,15 +121,16 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       ScaleType.SCALE_UP
     } else if (scaleDownEnabled && needScaleDown(avgCpuLoad, avgDirectMemoryRatio, avgDiskRatio, availableWorkers.size)) {
       ScaleType.SCALE_DOWN
+    } else {
+      ScaleType.STABILIZATION
     }
-    ScaleType.STABILIZATION
   }
 
   // sometimes user may manually scale replicas, check it.
   protected def checkReplicas(): Unit = {
     logInfo("check replicas")
     val podList = operator.workerPodList()
-    val prevOperation = master.statusSystem.scaleOperation
+    val prevOperation = statusSystem.scaleOperation
     val newOperation = prevOperation.synchronized {
       if (prevOperation.getScaleType == ScaleType.STABILIZATION && prevOperation.getExpectedWorkerReplicaNumber != podList.getItems.size()) {
         Some(new ScaleOperation(
@@ -143,7 +148,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
     newOperation match {
       case Some(operation) =>
-        master.statusSystem.handleScaleOperation(operation)
+        statusSystem.handleScaleOperation(operation)
         logInfo(s"The expectedWorkerReplicaNumber was changed to cluster replicas ${operation.getExpectedWorkerReplicaNumber}")
       case _ =>
     }
@@ -151,8 +156,8 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
 
   protected def checkPreviousScalingOperation(): Unit = {
     logInfo("check previous scaling operation")
-    val workersMap = master.statusSystem.workersMap
-    val prevOperation = master.statusSystem.scaleOperation
+    val workersMap = statusSystem.workersMap
+    val prevOperation = statusSystem.scaleOperation
     val podList = operator.workerPodList()
     val podNameToPods = podList.getItems.asScala.map(p => (p.getMetadata.getName, p)).toMap
     var decommissionWorkers: Option[List[ScalingWorker]] = None
@@ -201,7 +206,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
 
     newOperation match {
       case Some(operation) =>
-        master.statusSystem.handleScaleOperation(operation)
+        statusSystem.handleScaleOperation(operation)
         if (scaleReplicas) {
           operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
         }
@@ -225,13 +230,17 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
             idleWorkers.contains(scalingWorker.getUniqueId)
           } else {
             // for new created pods, now it's available
-            pod.getStatus.getPhase != KubernetesOperatorImpl.POD_PHASE_PENDING
+            // @TODO should we wait for normal worker status ?
+            // because worker may exit after started by some unknown exception
+            // if we wait for normal state, maybe we cannot finish this round
+            pod.getStatus.getPhase == KubernetesOperatorImpl.POD_PHASE_PENDING
           }
         }
         case None => true
       }
     }.toList
     if (recommissionWorkers.size == prevOperation.getNeedRecommissionWorkers.size()) {
+      // has not changed
       return None
     }
     Some(recommissionWorkers)
@@ -243,7 +252,8 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
    * Otherwise, return the list of workers that are not idle yet
    * */
   protected def checkDecommission(podNameToPods: Map[String, Pod], workersMap: util.Map[String, WorkerInfo], prevOperation: ScaleOperation): Option[List[ScalingWorker]] = {
-    val normalIPs = workersMap.asScala.values.filter(_.workerStatus.getState == PbWorkerStatus.State.Normal).map(_.host).toSet
+    val invalidScaleState = Array(PbWorkerStatus.State.Normal, PbWorkerStatus.State.InDecommissionThenIdle, PbWorkerStatus.State.InDecommission)
+    val normalIPs = workersMap.asScala.values.filter(w => invalidScaleState.contains(w.workerStatus.getState)).map(_.host).toSet
 
     val decommissionWorkers = prevOperation.getNeedDecommissionWorkers.asScala.filter { scalingWorker =>
       podNameToPods.get(scalingWorker.getName) match {
@@ -266,9 +276,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     val podList = operator.workerPodList()
     val podNameToPods = podList.getItems.asScala.map(p => (p.getMetadata.getName, p)).toMap
 
-    val workersMap = master.statusSystem.workersMap
-    val availableWorkers = master.statusSystem.availableWorkers
-    val prevOperation = master.statusSystem.scaleOperation
+    val workersMap = statusSystem.workersMap
+    val availableWorkers = statusSystem.availableWorkers
+    val prevOperation = statusSystem.scaleOperation
 
     val currentTime = System.currentTimeMillis()
 
@@ -366,7 +376,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
           lastScaleUpEndTime,
           lastScaleDownEndTime,
           System.currentTimeMillis(),
-          prevOperation.getExpectedWorkerReplicaNumber,
+          expectedWorkerReplicaNumber,
           recommissionWorkers.asJava,
           decommissionWorkers.asJava,
           scaleType
@@ -375,7 +385,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
     newOperation match {
       case Some(operation) =>
-        master.statusSystem.handleScaleOperation(operation)
+        statusSystem.handleScaleOperation(operation)
         if (scaleReplicas) {
           operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
         }
@@ -383,7 +393,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
   }
 
-  protected def doScale(): Unit = {
+  def doScale(): Unit = {
     if (!isMasterActive) {
       return
     }

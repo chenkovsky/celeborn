@@ -455,4 +455,15 @@ public class HAMasterMetaManager extends AbstractMetaManager {
       throw e;
     }
   }
+
+  @Override
+  public int isMasterActive() {
+    if (getRatisServer().isLeader()) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+
+
 }

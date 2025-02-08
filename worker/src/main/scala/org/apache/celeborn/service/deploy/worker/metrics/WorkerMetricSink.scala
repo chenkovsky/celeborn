@@ -49,10 +49,6 @@ class WorkerMetricSink(conf: CelebornConf) extends IWorkerMetricSink with Loggin
   }
 
   def update(): Unit = {
-    println(s"cpuGauge: ${cpuGauge.getValue}")
-    println(s"diskRatioMetrics: ${diskRatioGauge.getValue}")
-    println(s"directMemoryRatioMetrics: ${directMemoryRatioGauge.getValue}")
-
     cpuMetrics.synchronized {
       cpuMetrics.enqueue(cpuGauge.getValue)
       if (cpuMetrics.size > windowSize) {

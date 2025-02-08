@@ -289,7 +289,7 @@ private[celeborn] class Master(
       s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
       "valid scale manager.")
     val manager = managers.head
-    manager.init(this)
+    manager.init(this.configService, this.statusSystem)
     Some(manager)
   } else {
     None
@@ -1457,20 +1457,7 @@ private[celeborn] class Master(
     }
   }
 
-  private[master] def isMasterActive: Int = {
-    // use int rather than bool for better monitoring on dashboard
-    val isActive =
-      if (conf.haEnabled) {
-        if (statusSystem.asInstanceOf[HAMasterMetaManager].getRatisServer.isLeader) {
-          1
-        } else {
-          0
-        }
-      } else {
-        1
-      }
-    isActive
-  }
+  private[master] def isMasterActive: Int = statusSystem.isMasterActive
 
   private def getMasterGroupInfoInternal: String = {
     if (conf.haEnabled) {
