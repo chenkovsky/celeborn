@@ -51,7 +51,7 @@ import org.apache.celeborn.server.common.{HttpService, Service}
 import org.apache.celeborn.service.deploy.master.clustermeta.SingleMasterMetaManager
 import org.apache.celeborn.service.deploy.master.clustermeta.ha.{HAHelper, HAMasterMetaManager, MetaHandler}
 import org.apache.celeborn.service.deploy.master.quota.QuotaManager
-import org.apache.celeborn.service.deploy.master.scale.{IScaleManager, ScaleRequest}
+import org.apache.celeborn.service.deploy.master.scale.IScaleManager
 import org.apache.celeborn.service.deploy.master.tags.TagsManager
 
 private[celeborn] class Master(
@@ -937,18 +937,10 @@ private[celeborn] class Master(
     // reply false if offer slots failed
     if (slots == null || slots.isEmpty) {
       logError(s"Offer slots for $numReducers reducers of $shuffleKey failed!")
-      val retryAfter = scaleManager match {
-        case Some(manager) => manager.request(new ScaleRequest(
-          requestSlots.userIdentifier.toString,
-          requestSlots.tagsExpr,
-          numRequestedWorkers - numAvailableWorkers
-        ))
-        case _ => 0L
-      }
       context.reply(RequestSlotsResponse(
         StatusCode.SLOT_NOT_AVAILABLE,
         new WorkerResource(),
-        requestSlots.packed, retryAfter))
+        requestSlots.packed))
       return
     }
 
