@@ -32,13 +32,23 @@ import scala.collection.JavaConverters._
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util
 
+/**
+ * Kubernetes-specific implementation of IScaleManager that handles auto-scaling of Celeborn workers
+ * in a Kubernetes environment. This manager monitors resource utilization and automatically scales
+ * the worker pods up or down based on configured thresholds.
+ *
+ * @param conf The Celeborn configuration containing scaling parameters
+ */
 class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logging {
 
+  // Configuration parameters for scaling checks
   protected val checkInterval: Long = conf.scaleCheckInterval
 
+  // Worker count limits
   protected def minWorkerNum: Int = configService.getCelebornConf.minScaleWorkerNum
   protected def maxWorkerNum: Option[Int] = configService.getCelebornConf.maxScaleWorkerNum
 
+  // Scale down configuration
   protected def scaleDownEnabled: Boolean = configService.getCelebornConf.scaleDownEnabled
   protected def scaleDownDirectMemoryRatio: Double = configService.getCelebornConf.scaleDownDirectMemoryRatio
   protected def scaleDownDiskSpaceRatio: Double = configService.getCelebornConf.scaleDownDiskSpaceRatio
@@ -47,6 +57,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   protected def scaleDownPolicyStepNumber: Int = configService.getCelebornConf.scaleDownPolicyStepNumber
   protected def scaleDownPolicyPercent: Option[Double] = configService.getCelebornConf.scaleDownPolicyPercent
 
+  // Scale up configuration
   protected def scaleUpEnabled: Boolean = configService.getCelebornConf.scaleUpEnabled
   protected def scaleUpDirectMemoryRatio: Double = configService.getCelebornConf.scaleUpDirectMemoryRatio
   protected def scaleUpDiskSpaceRatio: Double = configService.getCelebornConf.scaleUpDiskSpaceRatio
@@ -55,21 +66,22 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   protected def scaleUpPolicyStepNumber: Int = configService.getCelebornConf.scaleUpPolicyStepNumber
   protected def scaleUpPolicyPercent: Option[Double] = configService.getCelebornConf.scaleUpPolicyPercent
 
+  // Kubernetes operations handler
   protected val operator: KubernetesOperator = createKubernetesOperator()
 
   protected def createKubernetesOperator(): KubernetesOperator = new KubernetesOperatorImpl()
 
+  // Services initialized later
   protected var configService: ConfigService = _
   protected var statusSystem: AbstractMetaManager = _
   protected var scheduler: ScheduledExecutorService = _
 
   protected def isMasterActive: Boolean = statusSystem.isMasterActive == 1
 
-  override def init(configService: ConfigService, statusSystem: AbstractMetaManager): Unit = {
-    this.configService = configService
-    this.statusSystem = statusSystem
-  }
-
+  /**
+   * Calculates the number of workers to scale up based on policy configuration.
+   * Uses either percentage-based or fixed-step scaling.
+   */
   protected def scaleUpNum(workerNum: Int): Int = {
     val num = scaleUpPolicyPercent match {
       case Some(p) => (workerNum * p).ceil.toInt
@@ -82,6 +94,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
   }
 
+  /**
+   * Calculates the number of workers to scale down based on policy configuration.
+   * Uses either percentage-based or fixed-step scaling.
+   */
   protected def scaleDownNum(workerNum: Int): Int = {
     val num = scaleDownPolicyPercent match {
       case Some(p) => (workerNum * p).ceil.toInt
@@ -90,6 +106,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     Math.max(Math.min(num, workerNum - minWorkerNum), 0)
   }
 
+  /**
+   * Determines if the cluster needs to scale down based on resource utilization metrics.
+   * Checks CPU load, disk space, and direct memory usage against configured thresholds.
+   */
   protected def needScaleDown(avgCpuLoad: Double, avgDirectMemoryRatio: Double, avgDiskRatio: Double, workerNum: Int): Boolean = {
     if (minWorkerNum >= workerNum) {
       return false
@@ -103,6 +123,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     false
   }
 
+  /**
+   * Determines if the cluster needs to scale up based on resource utilization metrics.
+   * Checks CPU load, disk space, and direct memory usage against configured thresholds.
+   */
   protected def needScaleUp(avgCpuLoad: Double, avgDirectMemoryRatio: Double, avgDiskRatio: Double, workerNum: Int): Boolean = {
     if (maxWorkerNum.isDefined && workerNum >= maxWorkerNum.get) {
       return false
@@ -126,6 +150,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     false
   }
 
+  /**
+   * Determines the type of scaling operation needed based on current cluster metrics.
+   * Returns SCALE_UP, SCALE_DOWN, or STABILIZATION based on resource utilization.
+   */
   protected def scaleType(availableWorkers: Set[WorkerInfo]): ScaleType = {
     val cpuLoads = availableWorkers.map(_.workerStatus.getStats.getOrDefault(WorkerMetrics.CPU_LOAD, "0").toDouble)
     val directMemoryRatios = availableWorkers.map(_.workerStatus.getStats.getOrDefault(WorkerMetrics.DIRECT_MEMORY_RATIO, "0").toDouble)
@@ -143,7 +171,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
   }
 
-  // sometimes user may manually scale replicas, check it.
+  /**
+   * Verifies if the actual number of replicas matches the expected number.
+   * Updates the scale operation if there's a mismatch (e.g., manual scaling occurred).
+   */
   protected def checkReplicas(): Unit = {
     logInfo("check replicas")
     val podList = operator.workerPodList()
@@ -171,6 +202,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
   }
 
+  /**
+   * Checks the status of ongoing scaling operations and updates them accordingly.
+   * Handles both recommissioning and decommissioning of workers.
+   */
   protected def checkPreviousScalingOperation(): Unit = {
     logInfo("check previous scaling operation")
     val workersMap = statusSystem.workersMap
@@ -230,11 +265,12 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       case _ =>
     }
   }
-  /***
-   * Remove recommissioned workers from ScaleOperation.
-   * If not updated, return None
-   * Otherwise, return the list of workers that are not recommissioned yet
-   * */
+
+  /**
+   * Checks which workers have been successfully recommissioned.
+   * Returns updated list of workers still needing recommission.
+   * Returns None if the list of workers has not changed.
+   */
   protected def checkRecommission(podNameToPods: Map[String, Pod], workersMap: util.Map[String, WorkerInfo], prevOperation: ScaleOperation): Option[List[ScalingWorker]] = {
     val idleWorkers = workersMap.asScala.values.filter{ worker =>
       worker.workerStatus.getState == PbWorkerStatus.State.Idle || worker.workerStatus.getState == PbWorkerStatus.State.InDecommissionThenIdle
@@ -263,11 +299,11 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     Some(recommissionWorkers)
   }
 
-  /***
-   * Remove decommissioned workers from ScaleOperation.
-   * If not updated, return None
-   * Otherwise, return the list of workers that are not idle yet
-   * */
+  /**
+   * Checks which workers have been successfully decommissioned.
+   * Returns updated list of workers still needing decommission.
+   * Returns None if the list of workers has not changed.
+   */
   protected def checkDecommission(podNameToPods: Map[String, Pod], workersMap: util.Map[String, WorkerInfo], prevOperation: ScaleOperation): Option[List[ScalingWorker]] = {
     val invalidScaleState = Array(PbWorkerStatus.State.Normal, PbWorkerStatus.State.InDecommissionThenIdle, PbWorkerStatus.State.InDecommission)
     val normalIPs = workersMap.asScala.values.filter(w => invalidScaleState.contains(w.workerStatus.getState)).map(_.host).toSet
@@ -288,6 +324,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     Some(decommissionWorkers)
   }
 
+  /**
+   * Main scaling logic that evaluates cluster state and initiates scaling operations.
+   * Considers resource utilization, stabilization windows, and current scaling state.
+   */
   protected def tryScale(): Unit = {
     logInfo("try scale")
     val podList = operator.workerPodList()
@@ -410,6 +450,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     }
   }
 
+  /**
+   * Main scaling routine that coordinates all scaling operations.
+   * Only executes if this is the active master and scaling is enabled.
+   */
   def doScale(): Unit = {
     if (!isMasterActive) {
       return
@@ -420,6 +464,11 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     checkReplicas()
     checkPreviousScalingOperation()
     tryScale()
+  }
+
+  override def init(configService: ConfigService, statusSystem: AbstractMetaManager): Unit = {
+    this.configService = configService
+    this.statusSystem = statusSystem
   }
 
   override def run(): Unit = {

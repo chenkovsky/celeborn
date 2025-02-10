@@ -19,8 +19,30 @@ package org.apache.celeborn.service.deploy.master.scale.kubernetes
 
 import io.fabric8.kubernetes.api.model.PodList
 
+/**
+ * Trait defining operations for managing Celeborn workers in a Kubernetes environment.
+ * This interface provides methods to interact with and manage worker pods and StatefulSets.
+ */
 trait KubernetesOperator {
+  /**
+   * Retrieves the list of all worker pods currently running in the Kubernetes cluster.
+   *
+   * @return PodList containing information about all worker pods
+   */
   def workerPodList(): PodList
+
+  /**
+   * Scales the worker StatefulSet to the specified number of replicas.
+   *
+   * @param replicas The desired number of worker pod replicas
+   */
   def scaleWorkerStatefulSetReplicas(replicas: Int): Unit
+
+  /**
+   * Generates the name for a worker pod at the specified index.
+   *
+   * @param idx The index of the worker pod
+   * @return The name of the worker pod
+   */
   def workerName(idx: Int): String
 }
