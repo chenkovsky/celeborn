@@ -28,6 +28,7 @@ import org.apache.celeborn.server.common.service.config.ConfigService
 import org.apache.celeborn.service.deploy.master.clustermeta.AbstractMetaManager
 import org.apache.celeborn.service.deploy.master.scale.{IScaleManager, ScaleOperation, ScaleType, ScalingWorker}
 
+import java.time.Clock
 import scala.collection.JavaConverters._
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util
@@ -70,6 +71,10 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   protected val operator: KubernetesOperator = createKubernetesOperator()
 
   protected def createKubernetesOperator(): KubernetesOperator = new KubernetesOperatorImpl()
+
+  private val _clock: Clock = Clock.systemDefaultZone
+
+  protected def clock: Clock = _clock
 
   // Services initialized later
   protected var configService: ConfigService = _
@@ -233,7 +238,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
         }
 
         val (scaleType, lastScaleUpEndTime, lastScaleDownEndTime, currentScaleStartTime, scaleReplicas) = if (r.isEmpty && d.isEmpty) {
-          val currentTime = System.currentTimeMillis()
+          val currentTime = clock.millis()
           val (lastScaleUpEndTime, lastScaleDownEndTime, scaleReplicas) = if (prevOperation.getScaleType == ScaleType.SCALE_DOWN) {
             (prevOperation.getLastScaleUpEndTime, currentTime, true)
           } else {
@@ -337,7 +342,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     val availableWorkers = statusSystem.availableWorkers
     val prevOperation = statusSystem.scaleOperation
 
-    val currentTime = System.currentTimeMillis()
+    val currentTime = clock.millis()
 
     val (newOperation, scaleReplicas) = prevOperation.synchronized {
       val (scaleType, expectedWorkerReplicaNumber) = workersMap.synchronized {
@@ -432,7 +437,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
         (Some(new ScaleOperation(
           lastScaleUpEndTime,
           lastScaleDownEndTime,
-          System.currentTimeMillis(),
+          clock.millis(),
           expectedWorkerReplicaNumber,
           recommissionWorkers.asJava,
           decommissionWorkers.asJava,
