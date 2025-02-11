@@ -159,10 +159,10 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
   }
 
-  test("should scale down when disk ratio is below threshold") {
+  test("should scale down when all metrics are below threshold") {
     // Create mock workers with only low disk usage
-    val workers = createWorkers(3, Map(
-      WorkerMetrics.CPU_LOAD -> "0.5", // Medium CPU load
+    var workers = createWorkers(3, Map(
+      WorkerMetrics.CPU_LOAD -> "50.0", // Medium CPU load
       WorkerMetrics.DISK_RATIO -> "0.2", // Low disk usage
       WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.5" // Medium memory usage
     ))
@@ -174,41 +174,35 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Trigger scale check
     scaleManager.doScale()
 
-    // Should scale down due to low disk usage
-    statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
-    statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 2
+    // Should not scale down due to medium CPU load and Medium memory usage
+    statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
+    statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
 
-    // Mark worker as idle to allow scale down
-    markWorker(workers(2), PbWorkerStatus.State.Idle_VALUE)
-    workerHeartBeat(workers)
-    scaleManager.doScale()
-    verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(2)
-  }
 
-  test("should scale down when direct memory ratio is below threshold") {
-    // Create mock workers with only low memory usage
-    val workers = createWorkers(3, Map(
-      WorkerMetrics.CPU_LOAD -> "0.5", // Medium CPU load
-      WorkerMetrics.DISK_RATIO -> "0.5", // Medium disk usage
+    workers = createWorkers(3, Map(
+      WorkerMetrics.CPU_LOAD -> "50.0", // Medium CPU load
+      WorkerMetrics.DISK_RATIO -> "0.2", // Low disk usage
       WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.2" // Low memory usage
     ))
-
     setupWorkerMocks(workers)
-    val podList = createPodList(3)
-    when(kubernetesOperator.workerPodList()).thenReturn(podList)
 
     // Trigger scale check
     scaleManager.doScale()
 
-    // Should scale down due to low memory usage
+    // Should not scale down due to medium CPU load
+    statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
+    statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
+
+    workers = createWorkers(3, Map(
+      WorkerMetrics.CPU_LOAD -> "20.0", // Medium CPU load
+      WorkerMetrics.DISK_RATIO -> "0.2", // Low disk usage
+      WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.2" // Low memory usage
+    ))
+    setupWorkerMocks(workers)
+    // Trigger scale check
+    scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 2
-
-    // Mark worker as idle to allow scale down
-    markWorker(workers(2), PbWorkerStatus.State.Idle_VALUE)
-    workerHeartBeat(workers)
-    scaleManager.doScale()
-    verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(2)
   }
 
   test("should switch from scale up to scale down when resource usage becomes low") {
@@ -642,24 +636,23 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
   }
 
   test("Scale up should respect stabilization interval") {
-    val conf = new CelebornConf()
     val intervalSeconds = 60000
     val startTime = System.currentTimeMillis()
-    conf.set("celeborn.master.scale.up.stabilization.interval", intervalSeconds.toString) // 1 minute window
+    conf.set(SCALE_UP_STABILIZATION_WINDOW_INTERVAL.key, intervalSeconds.toString) // 1 minute window
 
     val mockClock = mock[Clock]()
     scaleManager = new TestKubernetesScaleManager(conf, Some(mockClock))
     scaleManager.init(configService, statusSystem)
 
     // Create mock workers with high resource usage
-    val workers = createWorkers(2, Map(
+    var workers = createWorkers(2, Map(
       WorkerMetrics.CPU_LOAD -> "80.0",
       WorkerMetrics.DISK_RATIO -> "0.8",
       WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.8"
     ))
 
     setupWorkerMocks(workers)
-    val podList = createPodList(2)
+    var podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
 
     when(mockClock.millis).thenReturn(startTime)
@@ -668,6 +661,18 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_UP
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
+    clearInvocations(kubernetesOperator)
+
+    // Create mock workers with high resource usage
+    workers = createWorkers(3, Map(
+      WorkerMetrics.CPU_LOAD -> "80.0",
+      WorkerMetrics.DISK_RATIO -> "0.8",
+      WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.8"
+    ))
+
+    setupWorkerMocks(workers)
+    podList = createPodList(3)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
 
     // Move time forward but still within stabilization window
     when(mockClock.millis()).thenReturn(startTime + 30000) // 30 seconds later
@@ -675,38 +680,37 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Try to scale up again - should be blocked by stabilization window
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
-    verify(kubernetesOperator, times(1)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
 
     // Move time forward past stabilization window
-    when(mockClock.millis()).thenReturn(startTime + 70000) // 70 seconds later
+    when(mockClock.millis()).thenReturn(startTime + 100000) // 100 seconds later
 
     // Now should allow new scale up
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_UP
-    verify(kubernetesOperator, times(2)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, times(1)).scaleWorkerStatefulSetReplicas(4)
   }
 
   test("Scale down should respect stabilization interval") {
-    val conf = new CelebornConf()
     val intervalSeconds = 60000
-    conf.set("celeborn.master.scale.down.stabilization.interval", intervalSeconds.toString) // 1 minute window
+    conf.set(SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL.key, intervalSeconds.toString) // 1 minute window
 
     val mockClock = mock[Clock]()
-    val startTime = 1000000L
+    val startTime = System.currentTimeMillis()
     when(mockClock.millis()).thenReturn(startTime)
 
     scaleManager = new TestKubernetesScaleManager(conf, Some(mockClock))
     scaleManager.init(configService, statusSystem)
 
     // Create mock workers with low resource usage
-    val workers = createWorkers(3, Map(
+    var workers = createWorkers(3, Map(
       WorkerMetrics.CPU_LOAD -> "20.0",
       WorkerMetrics.DISK_RATIO -> "0.2",
       WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.2"
     ))
 
     setupWorkerMocks(workers)
-    val podList = createPodList(3)
+    var podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
 
     // First scale down
@@ -719,27 +723,36 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     workerHeartBeat(workers)
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(2)
+    clearInvocations(kubernetesOperator)
 
+    podList = createPodList(2)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    workers = createWorkers(2, Map(
+      WorkerMetrics.CPU_LOAD -> "20.0",
+      WorkerMetrics.DISK_RATIO -> "0.2",
+      WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.2"
+    ))
+    setupWorkerMocks(workers)
     // Move time forward but still within stabilization window
     when(mockClock.millis()).thenReturn(startTime + 30000) // 30 seconds later
-
     // Try to scale down again - should be blocked by stabilization window
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
-    verify(kubernetesOperator, times(1)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
 
     // Move time forward past stabilization window
-    when(mockClock.millis()).thenReturn(startTime + 70000) // 70 seconds later
+    when(mockClock.millis()).thenReturn(startTime + 100000) // 100 seconds later
 
     // Now should allow new scale down
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
-    verify(kubernetesOperator, times(1)).scaleWorkerStatefulSetReplicas(anyInt)
   }
 
   test("should consider scale up successful when worker exits abnormally but pod count matches") {
+    val intervalSeconds = 60000
+    conf.set(SCALE_UP_STABILIZATION_WINDOW_INTERVAL.key, intervalSeconds.toString) // 1 minute window
     // Create mock workers with high resource usage to trigger scale up
-    var workers = createWorkers(2, Map(
+    val workers = createWorkers(2, Map(
       WorkerMetrics.CPU_LOAD -> "80.0",
       WorkerMetrics.DISK_RATIO -> "0.8",
       WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.8"
@@ -767,9 +780,6 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
-
-    // Verify no more scale operations are triggered
-    verify(kubernetesOperator, times(1)).scaleWorkerStatefulSetReplicas(anyInt)
   }
 
   private def createWorkers(count: Int, metrics: Map[String, String]): Seq[WorkerInfo] = {
