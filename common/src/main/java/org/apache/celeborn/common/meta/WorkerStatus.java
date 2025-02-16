@@ -59,7 +59,8 @@ public class WorkerStatus {
   }
 
   public static WorkerStatus normalWorkerStatus(Map<String, String> stats) {
-    return new WorkerStatus(PbWorkerStatus.State.Normal.getNumber(), System.currentTimeMillis(), stats);
+    return new WorkerStatus(
+        PbWorkerStatus.State.Normal.getNumber(), System.currentTimeMillis(), stats);
   }
 
   @Override
@@ -87,7 +88,7 @@ public class WorkerStatus {
     sb.append("state=").append(getState());
     sb.append(", stateStartTime=").append(stateStartTime);
     sb.append(", stats=").append("{");
-    for (Map.Entry<String, String> entry: this.stats.entrySet()) {
+    for (Map.Entry<String, String> entry : this.stats.entrySet()) {
       sb.append(entry.getKey()).append("=").append(entry.getValue()).append(", ");
     }
     if (!this.stats.isEmpty()) {

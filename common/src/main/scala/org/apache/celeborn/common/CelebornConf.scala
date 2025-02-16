@@ -6111,7 +6111,7 @@ object CelebornConf extends Logging {
       .intConf
       .createWithDefault(3)
 
-  val MAX_SCALE_WORKER_NUM: ConfigEntry[Option[Int]] =
+  val MAX_SCALE_WORKER_NUM: OptionalConfigEntry[Int] =
     buildConf("celeborn.scale.workerNumber.max")
       .categories("worker", "scale")
       .doc("Max number of workers")
@@ -6175,7 +6175,7 @@ object CelebornConf extends Logging {
       .intConf
       .createWithDefault(1)
 
-  val SCALE_DOWN_POLICY_PERCENT: ConfigEntry[Option[Double]] =
+  val SCALE_DOWN_POLICY_PERCENT: OptionalConfigEntry[Double] =
     buildConf("celeborn.scale.down.policy.percent")
       .categories("worker", "scale")
       .doc("ratio of scale down")
@@ -6239,7 +6239,7 @@ object CelebornConf extends Logging {
       .intConf
       .createWithDefault(1)
 
-  val SCALE_UP_POLICY_PERCENT: ConfigEntry[Option[Double]] =
+  val SCALE_UP_POLICY_PERCENT: OptionalConfigEntry[Double] =
     buildConf("celeborn.scale.up.policy.percent")
       .categories("worker", "scale")
       .doc("ratio of scale up")
@@ -6263,7 +6263,7 @@ object CelebornConf extends Logging {
       .stringConf
       .createWithDefaultString("org.apache.celeborn.service.deploy.worker.metrics.WorkerMetricSink")
 
-  //  val SCALE_WORKER_BANDWIDTH: ConfigEntry[Option[Long]] =
+  //  val SCALE_WORKER_BANDWIDTH: OptionalConfigEntry[Long] =
   //    buildConf("celeborn.scale.bandwidth")
   //      .categories("worker", "scale")
   //      .doc("The bandwidth of worker")

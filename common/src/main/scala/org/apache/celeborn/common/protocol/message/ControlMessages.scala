@@ -1126,8 +1126,7 @@ object ControlMessages extends Logging {
           }
         RequestSlotsResponse(
           Utils.toStatusCode(pbRequestSlotsResponse.getStatus),
-          workerResource
-        )
+          workerResource)
 
       case CHANGE_LOCATION_VALUE =>
         PbRevive.parseFrom(message.getPayload)

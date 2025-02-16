@@ -1,14 +1,16 @@
 package org.apache.celeborn.service.deploy.worker.metrics
 
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+
+import scala.collection.mutable
+
 import com.codahale.metrics.Gauge
+
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.internal.Logging
 import org.apache.celeborn.common.metrics.source.{JVMCPUSource, WorkerMetrics}
 import org.apache.celeborn.common.util.ThreadUtils
 import org.apache.celeborn.service.deploy.worker.{Worker, WorkerSource}
-
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
-import scala.collection.mutable
 
 class WorkerMetricSink(conf: CelebornConf) extends IWorkerMetricSink with Logging {
 
@@ -22,9 +24,12 @@ class WorkerMetricSink(conf: CelebornConf) extends IWorkerMetricSink with Loggin
   private var worker: Worker = _
   private[this] var scheduler: ScheduledExecutorService = _
 
-  private lazy val cpuGauge = worker.jvmCPUResource.gauges().find(g => g.name == JVMCPUSource.JVM_CPU_LOAD).get.gauge.asInstanceOf[Gauge[Double]]
-  private lazy val diskRatioGauge = worker.workerSource.gauges().find(g => g.name == WorkerSource.DISK_USAGE_RATIO).get.gauge.asInstanceOf[Gauge[Double]]
-  private lazy val directMemoryRatioGauge = worker.workerSource.gauges().find(g => g.name == WorkerSource.DIRECT_MEMORY_USAGE_RATIO).get.gauge.asInstanceOf[Gauge[Double]]
+  private lazy val cpuGauge = worker.jvmCPUResource.gauges().find(g =>
+    g.name == JVMCPUSource.JVM_CPU_LOAD).get.gauge.asInstanceOf[Gauge[Double]]
+  private lazy val diskRatioGauge = worker.workerSource.gauges().find(g =>
+    g.name == WorkerSource.DISK_USAGE_RATIO).get.gauge.asInstanceOf[Gauge[Double]]
+  private lazy val directMemoryRatioGauge = worker.workerSource.gauges().find(g =>
+    g.name == WorkerSource.DIRECT_MEMORY_USAGE_RATIO).get.gauge.asInstanceOf[Gauge[Double]]
   private lazy val stats = worker.workerStatusManager.getWorkerStats
 
   override def stop(): Unit = {
@@ -44,8 +49,7 @@ class WorkerMetricSink(conf: CelebornConf) extends IWorkerMetricSink with Loggin
       },
       0,
       checkInterval,
-      TimeUnit.MILLISECONDS
-    )
+      TimeUnit.MILLISECONDS)
   }
 
   def update(): Unit = {
@@ -87,7 +91,9 @@ class WorkerMetricSink(conf: CelebornConf) extends IWorkerMetricSink with Loggin
 
     directMemoryRatioMetrics.synchronized {
       if (directMemoryRatioMetrics.size == windowSize) {
-        stats.put(WorkerMetrics.DIRECT_MEMORY_RATIO, (directMemoryRatioMetrics.sum / directMemoryRatioMetrics.size).toString)
+        stats.put(
+          WorkerMetrics.DIRECT_MEMORY_RATIO,
+          (directMemoryRatioMetrics.sum / directMemoryRatioMetrics.size).toString)
       }
     }
   }

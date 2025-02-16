@@ -24,12 +24,15 @@ import java.util.Collections
 import java.util.concurrent.{ExecutorService, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.ToLongFunction
+
 import scala.collection.JavaConverters._
 import scala.util.Random
+
 import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.ratis.proto.RaftProtos
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole
+
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.client.MasterClient
 import org.apache.celeborn.common.exception.CelebornException
@@ -283,17 +286,23 @@ private[celeborn] class Master(
     statusSystem.decommissionWorkers.size()
   }
 
-  private val scaleManager = if (conf.scaleScalerClassName.nonEmpty) {
-    val managers = Utils.loadExtensions(classOf[IScaleManager], scala.collection.immutable.Seq(conf.scaleScalerClassName), conf)
-    assert(managers.nonEmpty, "A valid scale manager must be specified by config " +
-      s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
-      "valid scale manager.")
-    val manager = managers.head
-    manager.init(this.configService, this.statusSystem)
-    Some(manager)
-  } else {
-    None
-  }
+  private val scaleManager =
+    if (conf.scaleScalerClassName.nonEmpty) {
+      val managers = Utils.loadExtensions(
+        classOf[IScaleManager],
+        scala.collection.immutable.Seq(conf.scaleScalerClassName),
+        conf)
+      assert(
+        managers.nonEmpty,
+        "A valid scale manager must be specified by config " +
+          s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
+          "valid scale manager.")
+      val manager = managers.head
+      manager.init(this.configService, this.statusSystem)
+      Some(manager)
+    } else {
+      None
+    }
 
   private val threadsStarted: AtomicBoolean = new AtomicBoolean(false)
   rpcEnv.setupEndpoint(RpcNameConstants.MASTER_EP, this)

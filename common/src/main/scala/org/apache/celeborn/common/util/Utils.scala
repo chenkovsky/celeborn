@@ -19,6 +19,7 @@ package org.apache.celeborn.common.util
 
 import java.io._
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
@@ -26,19 +27,22 @@ import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
 import java.util
 import java.util.{Locale, Properties, Random, UUID}
-import java.util.concurrent.{Callable, ThreadPoolExecutor, TimeUnit, TimeoutException}
+import java.util.concurrent.{Callable, ThreadPoolExecutor, TimeoutException, TimeUnit}
+
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try, Random => ScalaRandom}
+import scala.util.{Failure, Random => ScalaRandom, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
+
 import com.google.protobuf.{ByteString, GeneratedMessageV3}
 import io.netty.channel.unix.Errors.NativeIoException
 import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.roaringbitmap.RoaringBitmap
+
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.CelebornConf.PORT_MAX_RETRY
 import org.apache.celeborn.common.exception.{CelebornException, CelebornIOException}
@@ -50,8 +54,6 @@ import org.apache.celeborn.common.protocol.{PartitionLocation, PartitionSplitMod
 import org.apache.celeborn.common.protocol.message.{ControlMessages, Message, StatusCode}
 import org.apache.celeborn.common.protocol.message.ControlMessages.WorkerResource
 import org.apache.celeborn.reflect.DynConstructors
-
-import java.lang.reflect.InvocationTargetException
 
 object Utils extends Logging {
 
@@ -1383,11 +1385,14 @@ object Utils extends Logging {
    * Other exceptions are bubbled up.
    */
   def loadExtensions[T <: AnyRef](
-                                   extClass: Class[T], classes: Seq[String], conf: CelebornConf): Seq[T] = {
+      extClass: Class[T],
+      classes: Seq[String],
+      conf: CelebornConf): Seq[T] = {
     classes.flatMap { name =>
       try {
         val klass = classForName(name)
-        require(extClass.isAssignableFrom(klass),
+        require(
+          extClass.isAssignableFrom(klass),
           s"$name is not a subclass of ${extClass.getName}.")
 
         val ext = Try(klass.getConstructor(classOf[CelebornConf])) match {
@@ -1423,6 +1428,5 @@ object Utils extends Logging {
       }
     }
   }
-
 
 }

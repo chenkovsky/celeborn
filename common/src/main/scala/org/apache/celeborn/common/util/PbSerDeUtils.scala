@@ -488,7 +488,10 @@ object PbSerDeUtils {
   }
 
   def fromPbWorkerStatus(pbWorkerStatus: PbWorkerStatus): WorkerStatus = {
-    new WorkerStatus(pbWorkerStatus.getState.getNumber, pbWorkerStatus.getStateStartTime, pbWorkerStatus.getStatsMap)
+    new WorkerStatus(
+      pbWorkerStatus.getState.getNumber,
+      pbWorkerStatus.getStateStartTime,
+      pbWorkerStatus.getStatsMap)
   }
 
   def toPbWorkerEventInfo(workerEventInfo: WorkerEventInfo): PbWorkerEventInfo = {
