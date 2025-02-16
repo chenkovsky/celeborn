@@ -20,20 +20,27 @@ package org.apache.celeborn.service.deploy.master.scale.kubernetes
 import io.fabric8.kubernetes.api.model.PodList
 import io.fabric8.kubernetes.api.model.apps.StatefulSet
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientBuilder}
-import org.apache.celeborn.common.exception.CelebornException
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.celeborn.common.exception.CelebornException
+
 object KubernetesOperatorImpl {
+
   /** Environment variable for pod name */
   val ENV_POD_NAME = "POD_NAME"
+
   /** Environment variable for pod namespace */
   val ENV_POD_NAMESPACE = "POD_NAMESPACE"
+
   /** Label key for application name */
   val LABEL_APP_NAME = "app.kubernetes.io/name"
+
   /** Label key for role */
   val LABEL_ROLE = "app.kubernetes.io/role"
+
   /** Value for worker role label */
   val ROLE_WORKER = "worker"
+
   /** Pod phase constant for pending status */
   val POD_PHASE_PENDING = "Pending"
 }
@@ -67,7 +74,9 @@ class KubernetesOperatorImpl extends KubernetesOperator {
   }
 
   /** StatefulSet of the current pod */
-  protected val currentPod: StatefulSet = client.apps().statefulSets().inNamespace(podNamespace).withName(podName).get()
+  protected val currentPod: StatefulSet =
+    client.apps().statefulSets().inNamespace(podNamespace).withName(podName).get()
+
   /** Instance name from the pod labels */
   protected val currentInstance: String = currentPod.getMetadata.getLabels.get(LABEL_APP_NAME)
 
@@ -81,10 +90,10 @@ class KubernetesOperatorImpl extends KubernetesOperator {
    */
   protected val workerStatefulSetName: String = {
     val statefulSet = client.apps().statefulSets().withLabel(
-      LABEL_APP_NAME, currentInstance
-    ).withLabel(
-      LABEL_ROLE, ROLE_WORKER
-    ).list().getItems
+      LABEL_APP_NAME,
+      currentInstance).withLabel(
+      LABEL_ROLE,
+      ROLE_WORKER).list().getItems
     if (statefulSet.size() != 1) {
       throw new CelebornException("worker statefulSet is not unique")
     }
@@ -105,10 +114,10 @@ class KubernetesOperatorImpl extends KubernetesOperator {
    */
   def workerPodList(): PodList = {
     client.pods().withLabel(
-      LABEL_APP_NAME, currentInstance
-    ).withLabel(
-      LABEL_ROLE, ROLE_WORKER
-    ).list()
+      LABEL_APP_NAME,
+      currentInstance).withLabel(
+      LABEL_ROLE,
+      ROLE_WORKER).list()
   }
 
   /**

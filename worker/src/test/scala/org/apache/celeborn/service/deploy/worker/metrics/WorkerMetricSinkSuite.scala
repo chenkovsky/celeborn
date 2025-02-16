@@ -18,15 +18,15 @@
 package org.apache.celeborn.service.deploy.worker.metrics
 
 import com.codahale.metrics.Gauge
-import org.apache.celeborn.CelebornFunSuite
-import org.apache.celeborn.common.CelebornConf
-import org.apache.celeborn.common.metrics.source.{JVMCPUSource, NamedGauge, WorkerMetrics}
-import org.apache.celeborn.service.deploy.worker.{Worker, WorkerSource, WorkerStatusManager}
 import org.mockito.Mockito._
-import org.apache.celeborn.common.CelebornConf._
 import org.scalatest.matchers.must.Matchers._
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
+import org.apache.celeborn.CelebornFunSuite
+import org.apache.celeborn.common.CelebornConf
+import org.apache.celeborn.common.CelebornConf._
+import org.apache.celeborn.common.metrics.source.{JVMCPUSource, NamedGauge, WorkerMetrics}
+import org.apache.celeborn.service.deploy.worker.{Worker, WorkerSource, WorkerStatusManager}
 
 class WorkerMetricSinkSuite extends CelebornFunSuite {
 
@@ -69,8 +69,7 @@ class WorkerMetricSinkSuite extends CelebornFunSuite {
       NamedGauge(JVMCPUSource.JVM_CPU_LOAD, cpuGauge, Map())))
     when(workerSource.gauges()).thenReturn(List(
       NamedGauge(WorkerSource.DISK_USAGE_RATIO, diskGauge, Map()),
-      NamedGauge(WorkerSource.DIRECT_MEMORY_USAGE_RATIO, memoryGauge, Map()),
-    ))
+      NamedGauge(WorkerSource.DIRECT_MEMORY_USAGE_RATIO, memoryGauge, Map())))
   }
 
   override def beforeEach(): Unit = {
@@ -103,7 +102,7 @@ class WorkerMetricSinkSuite extends CelebornFunSuite {
     metricSink.report()
 
     // Verify results - should be empty
-    stats.isEmpty should be (true)
+    stats.isEmpty should be(true)
   }
 
   test("start and stop should work correctly") {

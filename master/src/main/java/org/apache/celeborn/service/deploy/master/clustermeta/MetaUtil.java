@@ -169,37 +169,47 @@ public class MetaUtil {
   }
 
   public static WorkerStatus fromPbWorkerStatus(ResourceProtos.WorkerStatus workerStatus) {
-    return new WorkerStatus(workerStatus.getState().getNumber(), workerStatus.getStateStartTime(), workerStatus.getStatsMap());
+    return new WorkerStatus(
+        workerStatus.getState().getNumber(),
+        workerStatus.getStateStartTime(),
+        workerStatus.getStatsMap());
   }
 
-  public static ScaleOperation fromPbScaleOperation(ResourceProtos.ScaleOperation  scaleOperation) {
+  public static ScaleOperation fromPbScaleOperation(ResourceProtos.ScaleOperation scaleOperation) {
     return new ScaleOperation(
-            scaleOperation.getLastScaleUpEndTime(),
-            scaleOperation.getLastScaleDownEndTime(),
-            scaleOperation.getCurrentScaleStartTime(),
-            scaleOperation.getExpectedWorkerReplicaNumber(),
-            scaleOperation.getNeedRecommissionWorkersList().stream().map(MetaUtil::fromPbScalingWorker).collect(Collectors.toList()),
-            scaleOperation.getNeedDecommissionWorkersList().stream().map(MetaUtil::fromPbScalingWorker).collect(Collectors.toList()),
-            ScaleType.values()[scaleOperation.getScaleType().getNumber()]
-    );
+        scaleOperation.getLastScaleUpEndTime(),
+        scaleOperation.getLastScaleDownEndTime(),
+        scaleOperation.getCurrentScaleStartTime(),
+        scaleOperation.getExpectedWorkerReplicaNumber(),
+        scaleOperation.getNeedRecommissionWorkersList().stream()
+            .map(MetaUtil::fromPbScalingWorker)
+            .collect(Collectors.toList()),
+        scaleOperation.getNeedDecommissionWorkersList().stream()
+            .map(MetaUtil::fromPbScalingWorker)
+            .collect(Collectors.toList()),
+        ScaleType.values()[scaleOperation.getScaleType().getNumber()]);
   }
 
   public static ScalingWorker fromPbScalingWorker(ResourceProtos.ScalingWorker scalingWorker) {
-    return new ScalingWorker(
-            scalingWorker.getName(),
-            scalingWorker.getUniqueId()
-    );
+    return new ScalingWorker(scalingWorker.getName(), scalingWorker.getUniqueId());
   }
 
-  public static ResourceProtos.ScaleOperation toPbScaleOperation(ScaleOperation  scaleOperation) {
+  public static ResourceProtos.ScaleOperation toPbScaleOperation(ScaleOperation scaleOperation) {
     return ResourceProtos.ScaleOperation.newBuilder()
-            .setCurrentScaleStartTime(scaleOperation.getCurrentScaleStartTime())
-            .setLastScaleDownEndTime(scaleOperation.getLastScaleDownEndTime())
-            .setLastScaleUpEndTime(scaleOperation.getLastScaleUpEndTime())
-            .setExpectedWorkerReplicaNumber(scaleOperation.getExpectedWorkerReplicaNumber())
-            .addAllNeedRecommissionWorkers(scaleOperation.getNeedRecommissionWorkers().stream().map(MetaUtil::toPbScalingWorker).collect(Collectors.toList()))
-            .addAllNeedDecommissionWorkers(scaleOperation.getNeedDecommissionWorkers().stream().map(MetaUtil::toPbScalingWorker).collect(Collectors.toList()))
-            .setScaleType(ResourceProtos.ScaleType.forNumber(scaleOperation.getScaleType().ordinal())).build();
+        .setCurrentScaleStartTime(scaleOperation.getCurrentScaleStartTime())
+        .setLastScaleDownEndTime(scaleOperation.getLastScaleDownEndTime())
+        .setLastScaleUpEndTime(scaleOperation.getLastScaleUpEndTime())
+        .setExpectedWorkerReplicaNumber(scaleOperation.getExpectedWorkerReplicaNumber())
+        .addAllNeedRecommissionWorkers(
+            scaleOperation.getNeedRecommissionWorkers().stream()
+                .map(MetaUtil::toPbScalingWorker)
+                .collect(Collectors.toList()))
+        .addAllNeedDecommissionWorkers(
+            scaleOperation.getNeedDecommissionWorkers().stream()
+                .map(MetaUtil::toPbScalingWorker)
+                .collect(Collectors.toList()))
+        .setScaleType(ResourceProtos.ScaleType.forNumber(scaleOperation.getScaleType().ordinal()))
+        .build();
   }
 
   public static ResourceProtos.ScalingWorker toPbScalingWorker(ScalingWorker scalingWorker) {

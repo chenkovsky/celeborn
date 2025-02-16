@@ -19,8 +19,11 @@ package org.apache.celeborn.common.metrics.source
 
 import java.lang.management.{ManagementFactory, OperatingSystemMXBean}
 import javax.management.{MBeanServer, ObjectName}
+
 import scala.util.control.NonFatal
+
 import com.codahale.metrics.Gauge
+
 import org.apache.celeborn.common.CelebornConf
 
 class JVMCPUSource(conf: CelebornConf, role: String) extends AbstractSource(conf, role) {

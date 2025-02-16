@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.api.model.PodList
  * This interface provides methods to interact with and manage worker pods and StatefulSets.
  */
 trait KubernetesOperator {
+
   /**
    * Retrieves the list of all worker pods currently running in the Kubernetes cluster.
    *

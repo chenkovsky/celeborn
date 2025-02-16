@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +40,7 @@ import org.apache.celeborn.service.deploy.master.clustermeta.MetaUtil;
 import org.apache.celeborn.service.deploy.master.clustermeta.ResourceProtos;
 import org.apache.celeborn.service.deploy.master.clustermeta.ResourceProtos.ResourceRequest;
 import org.apache.celeborn.service.deploy.master.clustermeta.ResourceProtos.Type;
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 
 public class HAMasterMetaManager extends AbstractMetaManager {
   private static final Logger LOG = LoggerFactory.getLogger(HAMasterMetaManager.class);
@@ -442,14 +442,14 @@ public class HAMasterMetaManager extends AbstractMetaManager {
   public void handleScaleOperation(ScaleOperation scaleOperation) {
     try {
       ratisServer.submitRequest(
-              ResourceRequest.newBuilder()
-                      .setCmdType(Type.Scale)
-                      .setRequestId(MasterClient.genRequestId())
-                      .setScalingOperationRequest(
-                              ResourceProtos.ScalingOperationRequest.newBuilder()
-                                      .setOperation(MetaUtil.toPbScaleOperation(scaleOperation))
-                                      .build())
-                      .build());
+          ResourceRequest.newBuilder()
+              .setCmdType(Type.Scale)
+              .setRequestId(MasterClient.genRequestId())
+              .setScalingOperationRequest(
+                  ResourceProtos.ScalingOperationRequest.newBuilder()
+                      .setOperation(MetaUtil.toPbScaleOperation(scaleOperation))
+                      .build())
+              .build());
     } catch (CelebornRuntimeException e) {
       LOG.error("Handle scale operation failed!", e);
       throw e;
@@ -464,6 +464,4 @@ public class HAMasterMetaManager extends AbstractMetaManager {
       return 0;
     }
   }
-
-
 }

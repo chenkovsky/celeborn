@@ -21,30 +21,29 @@ import org.apache.celeborn.server.common.service.config.ConfigService;
 import org.apache.celeborn.service.deploy.master.clustermeta.AbstractMetaManager;
 
 /**
- * Interface defining the contract for Celeborn's worker scaling functionality.
- * Implementations of this interface manage the scaling operations of worker nodes
- * in different deployment environments (e.g., Kubernetes, standalone).
+ * Interface defining the contract for Celeborn's worker scaling functionality. Implementations of
+ * this interface manage the scaling operations of worker nodes in different deployment environments
+ * (e.g., Kubernetes, standalone).
  */
 public interface IScaleManager {
-    /**
-     * Initializes the scale manager with necessary services.
-     *
-     * @param configService Service providing configuration settings
-     * @param statusSystem System managing cluster metadata and worker status
-     */
-    void init(ConfigService configService, AbstractMetaManager statusSystem);
+  /**
+   * Initializes the scale manager with necessary services.
+   *
+   * @param configService Service providing configuration settings
+   * @param statusSystem System managing cluster metadata and worker status
+   */
+  void init(ConfigService configService, AbstractMetaManager statusSystem);
 
-    /**
-     * Starts a background thread that periodically polls the cluster state
-     * and performs auto-scaling operations based on the current resource utilization.
-     * The polling thread continuously monitors the system and triggers scale up/down
-     * operations when needed.
-     */
-    void run();
+  /**
+   * Starts a background thread that periodically polls the cluster state and performs auto-scaling
+   * operations based on the current resource utilization. The polling thread continuously monitors
+   * the system and triggers scale up/down operations when needed.
+   */
+  void run();
 
-    /**
-     * Stops the background polling thread and terminates the auto-scaling operations.
-     * This method ensures a graceful shutdown of the polling mechanism.
-     */
-    void stop();
+  /**
+   * Stops the background polling thread and terminates the auto-scaling operations. This method
+   * ensures a graceful shutdown of the polling mechanism.
+   */
+  void stop();
 }

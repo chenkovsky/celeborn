@@ -18,12 +18,9 @@
 package org.apache.celeborn.service.deploy.master.scale;
 
 public enum ScaleType {
+  STABILIZATION,
 
-    STABILIZATION,
+  SCALE_UP,
 
-    SCALE_UP,
-
-    SCALE_DOWN
-
+  SCALE_DOWN
 }
-
