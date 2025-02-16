@@ -903,6 +903,35 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     verify(haStatusSystem, atLeastOnce()).handleScaleOperation(any())
   }
 
+  test("should adjust scale down target based on predicted load") {
+    // Create mock workers with medium-low resource usage
+    val workers = createWorkers(3, Map(
+      WorkerMetrics.CPU_LOAD -> "10.0",      // Medium-low CPU load
+      WorkerMetrics.DISK_RATIO -> "0.1",      // Medium-low disk usage
+      WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.1" // Medium-low memory usage
+    ))
+    workers.head.workerStatus.getStats.put(WorkerMetrics.CPU_LOAD, "80.0")
+
+    setupWorkerMocks(workers)
+    val podList = createPodList(3)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
+
+    conf.set(SCALE_DOWN_POLICY_STEP_NUMBER.key, "2")
+    conf.set(SCALE_DOWN_CPU_LOAD.key, "40.0")
+
+    // But predicted load would be too high with just 1 worker:
+    // Current load per worker: CPU=33.3%
+    // With 1 worker: CPU=100% (above scale up thresholds)
+    // With 2 workers: CPU=10% (below scale up thresholds)
+    // With 3 workers: CPU=10% (below scale up thresholds)
+
+    // Trigger scale check - should scale down to 2 workers instead of 1
+    scaleManager.doScale()
+    statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
+    statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 2
+
+  }
+
   private def createWorkers(count: Int, metrics: Map[String, String]): Seq[WorkerInfo] = {
     (0 until count).map { i =>
       val worker = new WorkerInfo(s"1.1.1.${i}", -1, -1, -1, -1)

@@ -187,6 +187,60 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   }
 
   /**
+   * Calculates the minimum number of worker replicas needed after scale down.
+   * Ensures that after scaling down, the remaining workers can handle the load without needing to scale up again.
+   * This prevents oscillation between scaling up and down.
+   *
+   * @param workersMap Map of worker info for all workers
+   * @param podNameToPods Map of pod names to Pod objects
+   * @param expectedWorkerReplicaNumber Target number of replicas after scale down
+   * @param maxWorkerReplicaNumber Maximum allowed number of replicas
+   * @return Minimum number of replicas needed to handle current load
+   */
+  protected def minWorkerReplicaNumber(workersMap: util.Map[String, WorkerInfo], podNameToPods: Map[String, Pod], expectedWorkerReplicaNumber: Int, maxWorkerReplicaNumber: Int): Int = {
+    val normalWorkers = workersMap.asScala.values.filter(
+      _.getWorkerStatus().getState == PbWorkerStatus.State.Normal).map(_.toUniqueId).toList
+
+    val ipToNormalWorkers = normalWorkers.map(uniqueId =>
+      (WorkerInfo.fromUniqueId(uniqueId).host, uniqueId)).toMap
+
+    val workers = (0 until expectedWorkerReplicaNumber).flatMap { idx =>
+      val podName = operator.workerName(idx)
+      val uniqueId = podNameToPods.get(podName) match {
+        case Some(pod) => ipToNormalWorkers.getOrElse(pod.getStatus.getPodIP, null)
+        case None => null
+      }
+      Option(uniqueId)
+    }.map(id => workersMap.get(id))
+    var totalCpuLoad = workers.map(_.workerStatus.getStats.getOrDefault(
+      WorkerMetrics.CPU_LOAD,
+      "0").toDouble).sum
+    var totalDirectMemoryRatios = workers.map(_.workerStatus.getStats.getOrDefault(
+      WorkerMetrics.DIRECT_MEMORY_RATIO,
+      "0").toDouble).sum
+    var totalDiskRatios = workers.map(_.workerStatus.getStats.getOrDefault(
+      WorkerMetrics.DISK_RATIO,
+      "0").toDouble).sum
+    var num = workers.size
+    var idx = expectedWorkerReplicaNumber
+    while (needScaleUp(totalCpuLoad / num , totalDirectMemoryRatios / num, totalDiskRatios / num, num) &&  idx < maxWorkerReplicaNumber) {
+      val podName = operator.workerName(idx)
+      val uniqueId = podNameToPods.get(podName) match {
+        case Some(pod) => ipToNormalWorkers.getOrElse(pod.getStatus.getPodIP, null)
+        case None => null
+      }
+      if (uniqueId != null) {
+        totalCpuLoad += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(WorkerMetrics.CPU_LOAD, "0").toDouble
+        totalDirectMemoryRatios += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(WorkerMetrics.DIRECT_MEMORY_RATIO, "0").toDouble
+        totalDiskRatios += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(WorkerMetrics.DISK_RATIO, "0").toDouble
+        num += 1
+      }
+      idx += 1
+    }
+    idx
+  }
+
+  /**
    * Determines if the cluster needs to scale down based on resource utilization metrics.
    * Checks CPU load, disk space, and direct memory usage against configured thresholds.
    */
@@ -243,13 +297,13 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
    * Returns SCALE_UP, SCALE_DOWN, or STABILIZATION based on resource utilization.
    */
   protected def scaleType(availableWorkers: Set[WorkerInfo]): ScaleType = {
-    val cpuLoads = availableWorkers.map(_.workerStatus.getStats.getOrDefault(
+    val cpuLoads = availableWorkers.toList.map(_.workerStatus.getStats.getOrDefault(
       WorkerMetrics.CPU_LOAD,
       "0").toDouble)
-    val directMemoryRatios = availableWorkers.map(_.workerStatus.getStats.getOrDefault(
+    val directMemoryRatios = availableWorkers.toList.map(_.workerStatus.getStats.getOrDefault(
       WorkerMetrics.DIRECT_MEMORY_RATIO,
       "0").toDouble)
-    val diskRatios = availableWorkers.map(_.workerStatus.getStats.getOrDefault(
+    val diskRatios = availableWorkers.toList.map(_.workerStatus.getStats.getOrDefault(
       WorkerMetrics.DISK_RATIO,
       "0").toDouble)
     val avgCpuLoad = cpuLoads.sum / cpuLoads.size
@@ -500,7 +554,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
           case ScaleType.SCALE_UP =>
             prevOperation.getExpectedWorkerReplicaNumber + scaleUpNum(availableWorkerNum)
           case ScaleType.SCALE_DOWN =>
-            prevOperation.getExpectedWorkerReplicaNumber - scaleDownNum(availableWorkerNum)
+            minWorkerReplicaNumber(workersMap, podNameToPods, prevOperation.getExpectedWorkerReplicaNumber - scaleDownNum(availableWorkerNum), prevOperation.getExpectedWorkerReplicaNumber)
           case _ => prevOperation.getExpectedWorkerReplicaNumber
         }
         val realScaleType =
