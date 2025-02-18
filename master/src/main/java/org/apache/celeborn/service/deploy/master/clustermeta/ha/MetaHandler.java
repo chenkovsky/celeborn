@@ -310,9 +310,14 @@ public class MetaHandler {
           metaSystem.updateMetaByReportWorkerDecommission(decommissionWorkers);
           break;
         case Scale:
-          ResourceProtos.ScalingOperationRequest req = request.getScalingOperationRequest();
-          metaSystem.updateScaleOperation(MetaUtil.fromPbScaleOperation(req.getOperation()));
+          ResourceProtos.ScalingOperationRequest scalingOperation =
+              request.getScalingOperationRequest();
+          metaSystem.updateScaleOperation(
+              MetaUtil.fromPbScaleOperation(scalingOperation.getOperation()));
           break;
+        case UpdateReplicas:
+          ResourceProtos.UpdateReplicasRequest updateReplicas = request.getUpdateReplicasRequest();
+          metaSystem.updateReplicas(updateReplicas.getReplicas());
         default:
           throw new IOException("Can not parse this command!" + request);
       }

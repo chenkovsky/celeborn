@@ -191,4 +191,9 @@ public class SingleMasterMetaManager extends AbstractMetaManager {
   public void handleScaleOperation(ScaleOperation scaleOperation) {
     updateScaleOperation(scaleOperation);
   }
+
+  @Override
+  public void handleUpdateReplicas(int replicas) {
+    updateReplicas(replicas);
+  }
 }

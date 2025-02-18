@@ -45,6 +45,7 @@ enum Type {
   ReviseLostShuffles = 29;
 
   Scale = 30;
+  UpdateReplicas = 31;
 }
 
 enum WorkerEventType {
@@ -81,6 +82,7 @@ message ResourceRequest {
   optional BatchUnregisterShuffleRequest batchUnregisterShuffleRequest = 25;
   optional ReviseLostShufflesRequest reviseLostShufflesRequest = 102;
   optional ScalingOperationRequest scalingOperationRequest = 103;
+  optional UpdateReplicasRequest updateReplicasRequest = 104;
 }
 
 message DiskInfo {
@@ -281,4 +283,8 @@ message ScaleOperation {
 
 message ScalingOperationRequest{
   required ScaleOperation operation = 1;
+}
+
+message UpdateReplicasRequest {
+    required int32 replicas = 1;
 }

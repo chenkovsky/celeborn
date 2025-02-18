@@ -464,4 +464,20 @@ public class HAMasterMetaManager extends AbstractMetaManager {
       return 0;
     }
   }
+
+  @Override
+  public void handleUpdateReplicas(int replicas) {
+    try {
+      ratisServer.submitRequest(
+          ResourceRequest.newBuilder()
+              .setCmdType(Type.UpdateReplicas)
+              .setRequestId(MasterClient.genRequestId())
+              .setUpdateReplicasRequest(
+                  ResourceProtos.UpdateReplicasRequest.newBuilder().setReplicas(replicas).build())
+              .build());
+    } catch (CelebornRuntimeException e) {
+      LOG.error("Handle scale operation failed!", e);
+      throw e;
+    }
+  }
 }

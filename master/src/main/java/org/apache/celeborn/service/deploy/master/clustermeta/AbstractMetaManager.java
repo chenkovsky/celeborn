@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
@@ -96,6 +97,7 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
   public final LongAdder shuffleTotalCount = new LongAdder();
   public final Map<String, Long> shuffleFallbackCounts = JavaUtils.newConcurrentHashMap();
   public final ScaleOperation scaleOperation = new ScaleOperation();
+  public final AtomicInteger replicas = new AtomicInteger();
 
   public final ConcurrentHashMap<String, ApplicationMeta> applicationMetas =
       JavaUtils.newConcurrentHashMap();
@@ -615,6 +617,10 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
       shuffleFallbackCounts.compute(
           fallbackPolicy, (k, v) -> v == null ? fallbackCounts.get(k) : v + fallbackCounts.get(k));
     }
+  }
+
+  public void updateReplicas(int replicas) {
+    this.replicas.set(replicas);
   }
 
   public void updateScaleOperation(ScaleOperation scaleOperation) {

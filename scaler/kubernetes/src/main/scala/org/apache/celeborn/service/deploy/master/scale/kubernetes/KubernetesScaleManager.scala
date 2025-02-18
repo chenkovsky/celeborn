@@ -197,7 +197,11 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
    * @param maxWorkerReplicaNumber Maximum allowed number of replicas
    * @return Minimum number of replicas needed to handle current load
    */
-  protected def minWorkerReplicaNumber(workersMap: util.Map[String, WorkerInfo], podNameToPods: Map[String, Pod], expectedWorkerReplicaNumber: Int, maxWorkerReplicaNumber: Int): Int = {
+  protected def minWorkerReplicaNumber(
+      workersMap: util.Map[String, WorkerInfo],
+      podNameToPods: Map[String, Pod],
+      expectedWorkerReplicaNumber: Int,
+      maxWorkerReplicaNumber: Int): Int = {
     val normalWorkers = workersMap.asScala.values.filter(
       _.getWorkerStatus().getState == PbWorkerStatus.State.Normal).map(_.toUniqueId).toList
 
@@ -223,16 +227,26 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       "0").toDouble).sum
     var num = workers.size
     var idx = expectedWorkerReplicaNumber
-    while (needScaleUp(totalCpuLoad / num , totalDirectMemoryRatios / num, totalDiskRatios / num, num) &&  idx < maxWorkerReplicaNumber) {
+    while (needScaleUp(
+        totalCpuLoad / num,
+        totalDirectMemoryRatios / num,
+        totalDiskRatios / num,
+        num) && idx < maxWorkerReplicaNumber) {
       val podName = operator.workerName(idx)
       val uniqueId = podNameToPods.get(podName) match {
         case Some(pod) => ipToNormalWorkers.getOrElse(pod.getStatus.getPodIP, null)
         case None => null
       }
       if (uniqueId != null) {
-        totalCpuLoad += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(WorkerMetrics.CPU_LOAD, "0").toDouble
-        totalDirectMemoryRatios += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(WorkerMetrics.DIRECT_MEMORY_RATIO, "0").toDouble
-        totalDiskRatios += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(WorkerMetrics.DISK_RATIO, "0").toDouble
+        totalCpuLoad += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(
+          WorkerMetrics.CPU_LOAD,
+          "0").toDouble
+        totalDirectMemoryRatios += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(
+          WorkerMetrics.DIRECT_MEMORY_RATIO,
+          "0").toDouble
+        totalDiskRatios += workersMap.get(uniqueId).workerStatus.getStats.getOrDefault(
+          WorkerMetrics.DISK_RATIO,
+          "0").toDouble
         num += 1
       }
       idx += 1
@@ -333,18 +347,27 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
    */
   protected def checkReplicas(): Unit = {
     logInfo("check replicas")
-    val podList = operator.workerPodList()
     val prevOperation = statusSystem.scaleOperation
+    val replicas = operator.workerReplicas()
     val newOperation = prevOperation.synchronized {
-      if (prevOperation.getScaleType == ScaleType.STABILIZATION && prevOperation.getExpectedWorkerReplicaNumber != podList.getItems.size()) {
+      val current = clock.millis()
+      if (statusSystem.replicas.get() != replicas) {
+        val lastScaleUpEndTime = prevOperation.getScaleType match {
+          case ScaleType.SCALE_UP => current
+          case _ => prevOperation.getLastScaleUpEndTime
+        }
+        val lastScaleDownEndTime = prevOperation.getScaleType match {
+          case ScaleType.SCALE_DOWN => current
+          case _ => prevOperation.getLastScaleDownEndTime
+        }
         Some(new ScaleOperation(
-          prevOperation.getLastScaleUpEndTime,
-          prevOperation.getLastScaleDownEndTime,
-          prevOperation.getCurrentScaleStartTime,
-          podList.getItems.size(),
-          prevOperation.getNeedRecommissionWorkers,
-          prevOperation.getNeedDecommissionWorkers,
-          prevOperation.getScaleType))
+          lastScaleUpEndTime,
+          lastScaleDownEndTime,
+          current,
+          replicas,
+          new util.ArrayList[ScalingWorker](),
+          new util.ArrayList[ScalingWorker](),
+          ScaleType.STABILIZATION))
       } else {
         None
       }
@@ -352,6 +375,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     newOperation match {
       case Some(operation) =>
         statusSystem.handleScaleOperation(operation)
+        statusSystem.handleUpdateReplicas(replicas)
         logInfo(s"The expectedWorkerReplicaNumber was changed to cluster replicas ${operation.getExpectedWorkerReplicaNumber}")
       case _ =>
     }
@@ -432,6 +456,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
         statusSystem.handleScaleOperation(operation)
         if (scaleReplicas) {
           operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
+          statusSystem.handleUpdateReplicas(operation.getExpectedWorkerReplicaNumber)
         }
       case _ =>
     }
@@ -554,7 +579,11 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
           case ScaleType.SCALE_UP =>
             prevOperation.getExpectedWorkerReplicaNumber + scaleUpNum(availableWorkerNum)
           case ScaleType.SCALE_DOWN =>
-            minWorkerReplicaNumber(workersMap, podNameToPods, prevOperation.getExpectedWorkerReplicaNumber - scaleDownNum(availableWorkerNum), prevOperation.getExpectedWorkerReplicaNumber)
+            minWorkerReplicaNumber(
+              workersMap,
+              podNameToPods,
+              prevOperation.getExpectedWorkerReplicaNumber - scaleDownNum(availableWorkerNum),
+              prevOperation.getExpectedWorkerReplicaNumber)
           case _ => prevOperation.getExpectedWorkerReplicaNumber
         }
         val realScaleType =
@@ -642,6 +671,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
         statusSystem.handleScaleOperation(operation)
         if (scaleReplicas) {
           operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
+          statusSystem.handleUpdateReplicas(operation.getExpectedWorkerReplicaNumber)
         }
       case _ =>
     }

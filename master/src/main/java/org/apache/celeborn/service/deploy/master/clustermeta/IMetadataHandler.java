@@ -97,4 +97,6 @@ public interface IMetadataHandler {
   void handleReportWorkerDecommission(List<WorkerInfo> workers, String requestId);
 
   void handleScaleOperation(ScaleOperation scaleOperation);
+
+  void handleUpdateReplicas(int replicas);
 }

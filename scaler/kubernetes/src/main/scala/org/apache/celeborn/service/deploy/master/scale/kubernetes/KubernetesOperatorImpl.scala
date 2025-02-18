@@ -120,6 +120,10 @@ class KubernetesOperatorImpl extends KubernetesOperator {
       ROLE_WORKER).list()
   }
 
+  def workerReplicas(): Int = {
+    client.apps().statefulSets().withName(workerStatefulSetName).get().getSpec.getReplicas
+  }
+
   /**
    * Scales the worker StatefulSet to the specified number of replicas
    * by updating the StatefulSet's replica count

@@ -100,16 +100,15 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     var podList = createPodList(1)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale check
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_UP
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 2
-    scaleManager.doScale()
-
     // Verify no need to update replica
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(2)
-
+    doAnswer(_ => 2).when(kubernetesOperator).workerReplicas()
     // haven't finished yet
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_UP
@@ -117,6 +116,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
 
     podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
     workerHeartBeat(workers)
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
@@ -136,6 +136,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale check
     scaleManager.doScale()
@@ -159,6 +160,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale check
     scaleManager.doScale()
@@ -182,6 +184,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale check
     scaleManager.doScale()
@@ -232,11 +235,14 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     var podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger initial scale up
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_UP
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
+    doAnswer(_ => 3).when(kubernetesOperator).workerReplicas()
+
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
     clearInvocations(kubernetesOperator)
@@ -250,6 +256,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale check again, should switch to scale down
     scaleManager.doScale()
@@ -286,8 +293,9 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
         WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.2"))
 
     setupWorkerMocks(workers)
-    val podList = createPodList(3)
+    var podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger initial scale down
     scaleManager.doScale()
@@ -311,8 +319,9 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(updatedWorkers)
 
     // Mock updated pod list after scale down
-    val updatedPodList = createPodList(2)
-    when(kubernetesOperator.workerPodList()).thenReturn(updatedPodList)
+    podList = createPodList(2)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
     // Trigger scale check again, should switch to scale up
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
@@ -330,6 +339,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(5)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Try to scale up
     scaleManager.doScale()
@@ -352,6 +362,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(1)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Try to scale down
     scaleManager.doScale()
@@ -377,6 +388,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Update pod list to show max workers
     val podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
     // Trigger scale down
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
@@ -405,6 +417,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(4)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale up
     scaleManager.doScale()
@@ -424,8 +437,9 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
         WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.8"))
 
     setupWorkerMocks(workers)
-    val initialPodList = createPodList(2)
-    when(kubernetesOperator.workerPodList()).thenReturn(initialPodList)
+    val podList = createPodList(2)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Mock scale operation failure
     when(kubernetesOperator.scaleWorkerStatefulSetReplicas(3))
@@ -456,20 +470,25 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     var podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // First scale attempt
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
+    clearInvocations(kubernetesOperator)
 
     // Pod list still shows original count (scale operation didn't take effect)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Second attempt - should retry since desired state wasn't reached
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
+    clearInvocations(kubernetesOperator)
 
     // Pod list still not updated
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Third attempt - should continue retrying
     scaleManager.doScale()
@@ -478,6 +497,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Finally, pod list shows the scale operation took effect
     podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // No more retries needed
     scaleManager.doScale()
@@ -499,6 +519,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     when(kubernetesOperator.workerPodList())
       .thenThrow(new RuntimeException("API server unavailable"))
       .thenReturn(createPodList(2))
+    doAnswer(_ => 2).when(kubernetesOperator).workerReplicas()
 
     // First attempt - should handle API failure gracefully
     assertThrows[RuntimeException] {
@@ -524,6 +545,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(4)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
     // Trigger scale down
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
@@ -569,8 +591,9 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
         WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.2"))
 
     setupWorkerMocks(workers)
-    val initialPodList = createPodList(2)
-    when(kubernetesOperator.workerPodList()).thenReturn(initialPodList)
+    val podList = createPodList(2)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Try to scale down - should not trigger scale operation
     scaleManager.doScale()
@@ -605,8 +628,9 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
         WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.8"))
 
     setupWorkerMocks(workers)
-    val initialPodList = createPodList(3)
-    when(kubernetesOperator.workerPodList()).thenReturn(initialPodList)
+    val podList = createPodList(3)
+    when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Try to scale up - should not trigger scale operation
     scaleManager.doScale()
@@ -641,6 +665,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale up
     scaleManager.doScale()
@@ -662,6 +687,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale up
     scaleManager.doScale()
@@ -691,6 +717,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     var podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     when(mockClock.millis).thenReturn(startTime)
     // Trigger scale check
@@ -711,6 +738,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Move time forward but still within stabilization window
     when(mockClock.millis()).thenReturn(startTime + 30000) // 30 seconds later
@@ -754,6 +782,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     var podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // First scale down
     scaleManager.doScale()
@@ -769,6 +798,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
 
     podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
     workers = createWorkers(
       2,
       Map(
@@ -808,6 +838,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     var podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // Trigger scale up
     scaleManager.doScale()
@@ -818,6 +849,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Update pod list to show 3 pods (scale up succeeded at pod level)
     podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // But worker process exits abnormally - worker count stays at 2
     // We don't add the new worker to workers list to simulate worker process exit
@@ -839,6 +871,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     when(ratisServer.isLeader).thenReturn(true)
     when(ratisServer.getWorkerTimeoutDeadline).thenReturn(startTime + 1000)
     doNothing().when(haStatusSystem).handleScaleOperation(any(classOf[ScaleOperation]))
+    doNothing().when(haStatusSystem).handleUpdateReplicas(anyInt)
     statusSystem = haStatusSystem
     scaleManager = new TestKubernetesScaleManager(conf, Some(mockClock))
     scaleManager.init(configService, statusSystem)
@@ -853,6 +886,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     scaleManager.doScale()
     verify(haStatusSystem, times(0)).handleScaleOperation(any())
@@ -874,6 +908,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     when(haStatusSystem.getRatisServer).thenReturn(ratisServer)
     when(ratisServer.getWorkerTimeoutDeadline).thenReturn(startTime)
     doNothing().when(haStatusSystem).handleScaleOperation(any(classOf[ScaleOperation]))
+    doNothing().when(haStatusSystem).handleUpdateReplicas(anyInt)
 
     statusSystem = haStatusSystem
     scaleManager = new TestKubernetesScaleManager(conf, Some(mockClock))
@@ -890,6 +925,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     setupWorkerMocks(workers)
     val podList = createPodList(2)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // First try when not master
     when(ratisServer.isLeader).thenReturn(false)
@@ -905,16 +941,19 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
 
   test("should adjust scale down target based on predicted load") {
     // Create mock workers with medium-low resource usage
-    val workers = createWorkers(3, Map(
-      WorkerMetrics.CPU_LOAD -> "10.0",      // Medium-low CPU load
-      WorkerMetrics.DISK_RATIO -> "0.1",      // Medium-low disk usage
-      WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.1" // Medium-low memory usage
-    ))
+    val workers = createWorkers(
+      3,
+      Map(
+        WorkerMetrics.CPU_LOAD -> "10.0", // Medium-low CPU load
+        WorkerMetrics.DISK_RATIO -> "0.1", // Medium-low disk usage
+        WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.1" // Medium-low memory usage
+      ))
     workers.head.workerStatus.getStats.put(WorkerMetrics.CPU_LOAD, "80.0")
 
     setupWorkerMocks(workers)
     val podList = createPodList(3)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
+    doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     conf.set(SCALE_DOWN_POLICY_STEP_NUMBER.key, "2")
     conf.set(SCALE_DOWN_CPU_LOAD.key, "40.0")

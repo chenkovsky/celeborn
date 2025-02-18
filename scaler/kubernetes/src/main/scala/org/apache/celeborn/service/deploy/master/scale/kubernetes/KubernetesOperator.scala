@@ -32,6 +32,8 @@ trait KubernetesOperator {
    */
   def workerPodList(): PodList
 
+  def workerReplicas(): Int
+
   /**
    * Scales the worker StatefulSet to the specified number of replicas.
    *
