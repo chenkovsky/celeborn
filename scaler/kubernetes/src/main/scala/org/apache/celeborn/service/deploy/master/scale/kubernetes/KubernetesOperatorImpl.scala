@@ -21,25 +21,16 @@ import io.fabric8.kubernetes.api.model.PodList
 import io.fabric8.kubernetes.api.model.apps.StatefulSet
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientBuilder}
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.celeborn.common.exception.CelebornException
+import org.apache.celeborn.common.internal.Logging
 
 object KubernetesOperatorImpl {
 
   /** Environment variable for pod name */
-  val ENV_POD_NAME = "POD_NAME"
+  val ENV_WORKER_STATEFUL_SET_NAME = "WORKER_STATEFUL_SET_NAME"
 
   /** Environment variable for pod namespace */
   val ENV_POD_NAMESPACE = "POD_NAMESPACE"
-
-  /** Label key for application name */
-  val LABEL_APP_NAME = "app.kubernetes.io/name"
-
-  /** Label key for role */
-  val LABEL_ROLE = "app.kubernetes.io/role"
-
-  /** Value for worker role label */
-  val ROLE_WORKER = "worker"
 
   /** Pod phase constant for pending status */
   val POD_PHASE_PENDING = "Pending"
@@ -50,7 +41,7 @@ object KubernetesOperatorImpl {
  * in a Kubernetes environment. This class handles interactions with the Kubernetes API to
  * manage worker pods and StatefulSets.
  */
-class KubernetesOperatorImpl extends KubernetesOperator {
+class KubernetesOperatorImpl extends KubernetesOperator with Logging {
 
   import KubernetesOperatorImpl._
 
@@ -67,37 +58,17 @@ class KubernetesOperatorImpl extends KubernetesOperator {
     throw new CelebornException("environment POD_NAMESPACE is empty")
   }
 
-  /** Name of the current pod */
-  protected val podName: String = System.getenv(ENV_POD_NAME)
-  if (StringUtils.isEmpty(podName)) {
-    throw new CelebornException("environment POD_NAME is empty")
-  }
-
-  /** StatefulSet of the current pod */
-  protected val currentPod: StatefulSet =
-    client.apps().statefulSets().inNamespace(podNamespace).withName(podName).get()
-
-  /** Instance name from the pod labels */
-  protected val currentInstance: String = currentPod.getMetadata.getLabels.get(LABEL_APP_NAME)
-
-  if (StringUtils.isEmpty(currentInstance)) {
-    throw new CelebornException(s"label ${LABEL_APP_NAME} is empty")
-  }
-
   /**
    * Name of the worker StatefulSet, determined by finding the unique StatefulSet
    * with matching app name and worker role labels
    */
   protected val workerStatefulSetName: String = {
-    val statefulSet = client.apps().statefulSets().withLabel(
-      LABEL_APP_NAME,
-      currentInstance).withLabel(
-      LABEL_ROLE,
-      ROLE_WORKER).list().getItems
-    if (statefulSet.size() != 1) {
-      throw new CelebornException("worker statefulSet is not unique")
-    }
-    statefulSet.get(0).getMetadata.getName
+    System.getenv(ENV_WORKER_STATEFUL_SET_NAME)
+  }
+
+  // Validate worker stateful set name
+  if (StringUtils.isEmpty(workerStatefulSetName)) {
+    throw new CelebornException("environment WORKER_STATEFUL_SET_NAME is empty")
   }
 
   /**
@@ -108,20 +79,26 @@ class KubernetesOperatorImpl extends KubernetesOperator {
     s"${workerStatefulSetName}-${idx}"
   }
 
+  def workerStatefulSet(): StatefulSet = {
+    val statefulSet = client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).get()
+    if (statefulSet == null) throw new CelebornException("StatefulSet not found: " + workerStatefulSetName)
+    statefulSet
+  }
+
   /**
    * Retrieves the list of all worker pods by filtering pods with matching app name
    * and worker role labels
    */
   def workerPodList(): PodList = {
-    client.pods().withLabel(
-      LABEL_APP_NAME,
-      currentInstance).withLabel(
-      LABEL_ROLE,
-      ROLE_WORKER).list()
+    val statefulSet = workerStatefulSet()
+    // 获取标签选择器
+    val selector = statefulSet.getSpec.getSelector.getMatchLabels
+    // 使用标签选择器获取 Pod
+    client.pods.inNamespace(podNamespace).withLabels(selector).list
   }
 
   def workerReplicas(): Int = {
-    client.apps().statefulSets().withName(workerStatefulSetName).get().getSpec.getReplicas
+    client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).get().getSpec.getReplicas
   }
 
   /**
@@ -129,6 +106,6 @@ class KubernetesOperatorImpl extends KubernetesOperator {
    * by updating the StatefulSet's replica count
    */
   def scaleWorkerStatefulSetReplicas(replicas: Int): Unit = {
-    client.apps().statefulSets().withName(workerStatefulSetName).scale(replicas)
+    client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).scale(replicas)
   }
 }
