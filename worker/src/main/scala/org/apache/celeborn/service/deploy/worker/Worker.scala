@@ -476,7 +476,7 @@ private[celeborn] class Worker(
 
   workerSource.addGauge(WorkerSource.DISK_USAGE_RATIO) { () =>
     val disks = workerInfo.diskInfos.asScala.values
-    disks.map(_.actualUsableSpace).sum.toDouble / disks.map(_.totalSpace).sum
+    1.0 - disks.map(_.actualUsableSpace).sum.toDouble / disks.map(_.totalSpace).sum
   }
 
   private def highWorkload: Boolean = {
