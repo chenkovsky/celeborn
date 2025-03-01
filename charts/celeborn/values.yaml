@@ -261,7 +261,16 @@ rbac:
   rules:
     - apiGroups: [""]
       resources: ["pods"]
-      verbs: ["create", "list", "delete"]
+      verbs: ["list"]
     - apiGroups: ["apps"]
       resources: ["statefulsets"]
-      verbs: ["get", "list", "update"]
+      verbs: ["get"]
+    - apiGroups: ["apps"]
+      resources: ["statefulsets/scale"]
+      verbs: ["get"]
+
+dynamicConfig: |-
+  - level: SYSTEM
+    config:
+      celeborn.scale.up.enabled: true
+      celeborn.scale.down.enabled: true

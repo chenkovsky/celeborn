@@ -267,13 +267,13 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     event.getEventType should be(WorkerEventType.DecommissionThenIdle)
     // cannot update replicas because worker has not been decommissioned.
     scaleManager.doScale()
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
 
     // still cannot update replicas
     markWorker(workers(2), PbWorkerStatus.State.InDecommissionThenIdle_VALUE)
     workerHeartBeat(workers)
     scaleManager.doScale()
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
 
     // now it's safe to update replicas
     markWorker(workers(2), PbWorkerStatus.State.Idle_VALUE)
@@ -302,7 +302,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 2
     scaleManager.doScale()
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
 
     markWorker(workers(2), PbWorkerStatus.State.Idle_VALUE)
     workerHeartBeat(workers)
@@ -394,7 +394,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 1
     scaleManager.doScale()
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
     markWorker(workers(1), PbWorkerStatus.State.Idle_VALUE)
     workerHeartBeat(workers)
     scaleManager.doScale()
@@ -453,6 +453,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
     doNothing().when(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
+    clearInvocations(kubernetesOperator)
     // Second attempt - should retry and succeed
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
@@ -460,7 +461,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
 
   test("should retry when kubernetes scale operation does not take effect") {
     // Create mock workers with high resource usage
-    val workers = createWorkers(
+    var workers = createWorkers(
       2,
       Map(
         WorkerMetrics.CPU_LOAD -> "80.0",
@@ -493,15 +494,23 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Third attempt - should continue retrying
     scaleManager.doScale()
     verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
+    clearInvocations(kubernetesOperator)
 
     // Finally, pod list shows the scale operation took effect
     podList = createPodList(3)
+    workers = createWorkers(
+      3,
+      Map(
+        WorkerMetrics.CPU_LOAD -> "50.0",
+        WorkerMetrics.DISK_RATIO -> "0.5",
+        WorkerMetrics.DIRECT_MEMORY_RATIO -> "0.5"))
+    setupWorkerMocks(workers)
     when(kubernetesOperator.workerPodList()).thenReturn(podList)
     doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     // No more retries needed
     scaleManager.doScale()
-    verify(kubernetesOperator).scaleWorkerStatefulSetReplicas(3)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt())
   }
 
   test("should handle intermittent kubernetes api failures") {
@@ -551,7 +560,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.SCALE_DOWN
     statusSystem.scaleOperation.getExpectedWorkerReplicaNumber shouldEqual 3
     scaleManager.doScale()
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
     markWorker(workers(3), PbWorkerStatus.State.InDecommissionThenIdle_VALUE)
 
     // Update metrics to show high resource usage
@@ -574,7 +583,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     val r = statusSystem.scaleOperation.getNeedRecommissionWorkers.get(0)
     r.getUniqueId shouldEqual workers(3).toUniqueId
     r.getName shouldEqual podList.getItems.get(3).getMetadata.getName
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
   }
 
   test("should only scale up when scale down is disabled") {
@@ -746,7 +755,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Try to scale up again - should be blocked by stabilization window
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
 
     // Move time forward past stabilization window
     when(mockClock.millis()).thenReturn(startTime + 100000) // 100 seconds later
@@ -811,7 +820,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     // Try to scale down again - should be blocked by stabilization window
     scaleManager.doScale()
     statusSystem.scaleOperation.getScaleType shouldEqual ScaleType.STABILIZATION
-    verify(kubernetesOperator, times(0)).scaleWorkerStatefulSetReplicas(anyInt)
+    verify(kubernetesOperator, never()).scaleWorkerStatefulSetReplicas(anyInt)
 
     // Move time forward past stabilization window
     when(mockClock.millis()).thenReturn(startTime + 100000) // 100 seconds later
@@ -889,7 +898,7 @@ class KubernetesScaleManagerSuite extends CelebornFunSuite with Matchers {
     doAnswer(_ => podList.getItems.size()).when(kubernetesOperator).workerReplicas()
 
     scaleManager.doScale()
-    verify(haStatusSystem, times(0)).handleScaleOperation(any())
+    verify(haStatusSystem, never()).handleScaleOperation(any())
 
     when(mockClock.millis).thenReturn(startTime + 2000)
     scaleManager.doScale()

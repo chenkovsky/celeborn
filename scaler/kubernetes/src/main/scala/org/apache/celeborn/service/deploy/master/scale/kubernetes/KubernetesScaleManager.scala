@@ -427,7 +427,11 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
         recommissionWorkers = checkRecommission(podNameToPods, workersMap, prevOperation)
         decommissionWorkers = checkDecommission(podNameToPods, workersMap, prevOperation)
       }
-      if (recommissionWorkers.isEmpty && decommissionWorkers.isEmpty) {
+      val replicas = statusSystem.replicas.get()
+      if (prevOperation.getScaleType == ScaleType.SCALE_UP && replicas < prevOperation.getExpectedWorkerReplicaNumber) {
+        // maybe previous kubernetes api call failed
+        (None, true)
+      } else if (recommissionWorkers.isEmpty && decommissionWorkers.isEmpty) {
         (None, false)
       } else {
         val r = recommissionWorkers match {
@@ -483,11 +487,15 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     newOperation match {
       case Some(operation) =>
         statusSystem.handleScaleOperation(operation)
-        if (scaleReplicas) {
-          operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
-          statusSystem.handleUpdateReplicas(operation.getExpectedWorkerReplicaNumber)
-        }
       case _ =>
+    }
+
+    val operation = newOperation.getOrElse(prevOperation)
+
+    if (scaleReplicas) {
+      logInfo(s"scale worker stateful set replicas from ${podList.getItems.size()} to ${operation.getExpectedWorkerReplicaNumber}")
+      operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
+      statusSystem.handleUpdateReplicas(operation.getExpectedWorkerReplicaNumber)
     }
   }
 
@@ -699,6 +707,8 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       case Some(operation) =>
         statusSystem.handleScaleOperation(operation)
         if (scaleReplicas) {
+          logInfo(
+            s"scale worker stateful set replicas from ${podList.getItems.size()} to ${operation.getExpectedWorkerReplicaNumber}")
           operator.scaleWorkerStatefulSetReplicas(operation.getExpectedWorkerReplicaNumber)
           statusSystem.handleUpdateReplicas(operation.getExpectedWorkerReplicaNumber)
         }
