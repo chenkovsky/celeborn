@@ -59,7 +59,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       configEntry.key,
       configEntry,
       java.lang.Double.TYPE,
-      ConfigType.BYTES)
+      ConfigType.STRING)
   }
 
   protected def getIntConfig(configEntry: ConfigEntry[Int]): Int = {
@@ -70,7 +70,18 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       configEntry.key,
       configEntry,
       java.lang.Integer.TYPE,
-      ConfigType.BYTES)
+      ConfigType.STRING)
+  }
+
+  protected def getTimeMSConfig(configEntry: ConfigEntry[Long]): Long = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
+    configService.getSystemConfigFromCache.getValue(
+      configEntry.key,
+      configEntry,
+      java.lang.Long.TYPE,
+      ConfigType.TIME_MS)
   }
 
   protected def getLongConfig(configEntry: ConfigEntry[Long]): Long = {
@@ -81,7 +92,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       configEntry.key,
       configEntry,
       java.lang.Long.TYPE,
-      ConfigType.BYTES)
+      ConfigType.STRING)
   }
 
   protected def getBooleanConfig(configEntry: ConfigEntry[Boolean]): Boolean = {
@@ -92,7 +103,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       configEntry.key,
       configEntry,
       java.lang.Boolean.TYPE,
-      ConfigType.BYTES)
+      ConfigType.STRING)
   }
 
   protected def getOptionalIntConfig(configEntry: OptionalConfigEntry[Int]): Option[Int] = {
@@ -103,7 +114,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       configEntry.key,
       null,
       classOf[java.lang.String],
-      ConfigType.BYTES)
+      ConfigType.STRING)
     if (StringUtils.isEmpty(value)) {
       configService.getCelebornConf.get(configEntry)
     } else {
@@ -120,7 +131,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
       configEntry.key,
       null,
       classOf[java.lang.String],
-      ConfigType.BYTES)
+      ConfigType.STRING)
     if (StringUtils.isEmpty(value)) {
       configService.getCelebornConf.get(configEntry)
     } else {
@@ -129,35 +140,35 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   }
 
   // Worker count limits
-  protected def minWorkerNum: Int = getIntConfig(CelebornConf.MIN_SCALE_WORKER_NUM)
-  protected def maxWorkerNum: Option[Int] = getOptionalIntConfig(CelebornConf.MAX_SCALE_WORKER_NUM)
+  def minWorkerNum: Int = getIntConfig(CelebornConf.MIN_SCALE_WORKER_NUM)
+  def maxWorkerNum: Option[Int] = getOptionalIntConfig(CelebornConf.MAX_SCALE_WORKER_NUM)
 
   // Scale down configuration
-  protected def scaleDownEnabled: Boolean = getBooleanConfig(CelebornConf.SCALE_DOWN_ENABLED)
-  protected def scaleDownDirectMemoryRatio: Double =
+  def scaleDownEnabled: Boolean = getBooleanConfig(CelebornConf.SCALE_DOWN_ENABLED)
+  def scaleDownDirectMemoryRatio: Double =
     getDoubleConfig(CelebornConf.SCALE_DOWN_DIRECT_MEMORY_RATIO)
-  protected def scaleDownDiskSpaceRatio: Double =
+  def scaleDownDiskSpaceRatio: Double =
     getDoubleConfig(CelebornConf.SCALE_DOWN_DISK_SPACE_RATIO)
-  protected def scaleDownCpuLoad: Double = getDoubleConfig(CelebornConf.SCALE_DOWN_CPU_LOAD)
-  protected def scaleDownStabilizationWindowInterval: Long =
-    getLongConfig(CelebornConf.SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL)
-  protected def scaleDownPolicyStepNumber: Int =
+  def scaleDownCpuLoad: Double = getDoubleConfig(CelebornConf.SCALE_DOWN_CPU_LOAD)
+  def scaleDownStabilizationWindowInterval: Long =
+    getTimeMSConfig(CelebornConf.SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL)
+  def scaleDownPolicyStepNumber: Int =
     getIntConfig(CelebornConf.SCALE_DOWN_POLICY_STEP_NUMBER)
-  protected def scaleDownPolicyPercent: Option[Double] =
+  def scaleDownPolicyPercent: Option[Double] =
     getOptionalDoubleConfig(CelebornConf.SCALE_DOWN_POLICY_PERCENT)
 
   // Scale up configuration
-  protected def scaleUpEnabled: Boolean = getBooleanConfig(CelebornConf.SCALE_UP_ENABLED)
-  protected def scaleUpDirectMemoryRatio: Double =
+  def scaleUpEnabled: Boolean = getBooleanConfig(CelebornConf.SCALE_UP_ENABLED)
+  def scaleUpDirectMemoryRatio: Double =
     getDoubleConfig(CelebornConf.SCALE_UP_DIRECT_MEMORY_RATIO)
-  protected def scaleUpDiskSpaceRatio: Double =
+  def scaleUpDiskSpaceRatio: Double =
     getDoubleConfig(CelebornConf.SCALE_UP_DISK_SPACE_RATIO)
-  protected def scaleUpCPULoad: Double = getDoubleConfig(CelebornConf.SCALE_UP_CPU_LOAD)
-  protected def scaleUpStabilizationWindowInterval: Long =
-    getLongConfig(CelebornConf.SCALE_UP_STABILIZATION_WINDOW_INTERVAL)
-  protected def scaleUpPolicyStepNumber: Int =
+  def scaleUpCPULoad: Double = getDoubleConfig(CelebornConf.SCALE_UP_CPU_LOAD)
+  def scaleUpStabilizationWindowInterval: Long =
+    getTimeMSConfig(CelebornConf.SCALE_UP_STABILIZATION_WINDOW_INTERVAL)
+  def scaleUpPolicyStepNumber: Int =
     getIntConfig(CelebornConf.SCALE_UP_POLICY_STEP_NUMBER)
-  protected def scaleUpPolicyPercent: Option[Double] =
+  def scaleUpPolicyPercent: Option[Double] =
     getOptionalDoubleConfig(CelebornConf.SCALE_UP_POLICY_PERCENT)
 
   // Kubernetes operations handler

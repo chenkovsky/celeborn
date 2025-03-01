@@ -21,6 +21,7 @@ import io.fabric8.kubernetes.api.model.PodList
 import io.fabric8.kubernetes.api.model.apps.StatefulSet
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientBuilder}
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.celeborn.common.exception.CelebornException
 import org.apache.celeborn.common.internal.Logging
 
@@ -80,8 +81,10 @@ class KubernetesOperatorImpl extends KubernetesOperator with Logging {
   }
 
   def workerStatefulSet(): StatefulSet = {
-    val statefulSet = client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).get()
-    if (statefulSet == null) throw new CelebornException("StatefulSet not found: " + workerStatefulSetName)
+    val statefulSet =
+      client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).get()
+    if (statefulSet == null)
+      throw new CelebornException("StatefulSet not found: " + workerStatefulSetName)
     statefulSet
   }
 
@@ -98,7 +101,8 @@ class KubernetesOperatorImpl extends KubernetesOperator with Logging {
   }
 
   def workerReplicas(): Int = {
-    client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).get().getSpec.getReplicas
+    client.apps().statefulSets().inNamespace(podNamespace).withName(
+      workerStatefulSetName).get().getSpec.getReplicas
   }
 
   /**
@@ -106,6 +110,7 @@ class KubernetesOperatorImpl extends KubernetesOperator with Logging {
    * by updating the StatefulSet's replica count
    */
   def scaleWorkerStatefulSetReplicas(replicas: Int): Unit = {
-    client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).scale(replicas)
+    client.apps().statefulSets().inNamespace(podNamespace).withName(workerStatefulSetName).scale(
+      replicas)
   }
 }
