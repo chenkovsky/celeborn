@@ -143,7 +143,7 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
     getOptionalDoubleConfig(CelebornConf.SCALE_UP_POLICY_PERCENT)
 
   // Kubernetes operations handler
-  protected val operator: KubernetesOperator = createKubernetesOperator()
+  protected lazy val operator: KubernetesOperator = createKubernetesOperator()
 
   protected def createKubernetesOperator(): KubernetesOperator = new KubernetesOperatorImpl()
 
