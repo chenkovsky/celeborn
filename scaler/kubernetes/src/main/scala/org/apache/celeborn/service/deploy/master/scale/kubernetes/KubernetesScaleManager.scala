@@ -52,6 +52,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   protected val checkInterval: Long = conf.scaleCheckInterval
 
   protected def getDoubleConfig(configEntry: ConfigEntry[Double]): Double = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
     configService.getSystemConfigFromCache.getValue(
       configEntry.key,
       configEntry,
@@ -60,6 +63,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   }
 
   protected def getIntConfig(configEntry: ConfigEntry[Int]): Int = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
     configService.getSystemConfigFromCache.getValue(
       configEntry.key,
       configEntry,
@@ -68,6 +74,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   }
 
   protected def getLongConfig(configEntry: ConfigEntry[Long]): Long = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
     configService.getSystemConfigFromCache.getValue(
       configEntry.key,
       configEntry,
@@ -76,6 +85,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   }
 
   protected def getBooleanConfig(configEntry: ConfigEntry[Boolean]): Boolean = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
     configService.getSystemConfigFromCache.getValue(
       configEntry.key,
       configEntry,
@@ -84,6 +96,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
   }
 
   protected def getOptionalIntConfig(configEntry: OptionalConfigEntry[Int]): Option[Int] = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
     val value = configService.getSystemConfigFromCache.getValue(
       configEntry.key,
       null,
@@ -98,6 +113,9 @@ class KubernetesScaleManager(conf: CelebornConf) extends IScaleManager with Logg
 
   protected def getOptionalDoubleConfig(configEntry: OptionalConfigEntry[Double])
       : Option[Double] = {
+    if (configService == null) {
+      return conf.get(configEntry)
+    }
     val value = configService.getSystemConfigFromCache.getValue(
       configEntry.key,
       null,
