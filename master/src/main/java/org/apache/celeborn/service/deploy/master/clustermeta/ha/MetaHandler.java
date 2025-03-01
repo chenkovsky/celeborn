@@ -318,6 +318,7 @@ public class MetaHandler {
         case UpdateReplicas:
           ResourceProtos.UpdateReplicasRequest updateReplicas = request.getUpdateReplicasRequest();
           metaSystem.updateReplicas(updateReplicas.getReplicas());
+          break;
         default:
           throw new IOException("Can not parse this command!" + request);
       }
