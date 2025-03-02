@@ -256,7 +256,7 @@ rbac:
       verbs: ["get"]
     - apiGroups: ["apps"]
       resources: ["statefulsets/scale"]
-      verbs: ["get"]
+      verbs: ["get", "update", "patch"]
 
 dynamicConfig: |-
   - level: SYSTEM
