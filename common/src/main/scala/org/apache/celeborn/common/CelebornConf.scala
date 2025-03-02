@@ -6215,13 +6215,6 @@ object CelebornConf extends Logging {
       .doubleConf
       .checkValue(v => v >= 0.0 && v <= 100, "Should be in [0.0, 100.0].")
       .createWithDefault(90.0)
-  //  val SCALE_UP_NETWORK_RATIO: ConfigEntry[Double] =
-  //    buildConf("celeborn.scale.up.network.ratio")
-  //      .categories("worker", "scale")
-  //      .doc("The min ratio for network bandwidth, below which the number of workers will be reduced")
-  //      .version("0.6.0")
-  //      .doubleConf
-  //      .createWithDefault(0.7)
 
   val SCALE_UP_STABILIZATION_WINDOW_INTERVAL: ConfigEntry[Long] =
     buildConf("celeborn.scale.up.stabilizationWindowInterval")
@@ -6262,14 +6255,6 @@ object CelebornConf extends Logging {
       .version("0.6.0")
       .stringConf
       .createWithDefaultString("org.apache.celeborn.service.deploy.worker.metrics.WorkerMetricSink")
-
-  //  val SCALE_WORKER_BANDWIDTH: OptionalConfigEntry[Long] =
-  //    buildConf("celeborn.scale.bandwidth")
-  //      .categories("worker", "scale")
-  //      .doc("The bandwidth of worker")
-  //      .version("0.6.0")
-  //      .longConf
-  //      .createOptional
 
   val SCALE_SLIDINGWINDOW_SIZE: ConfigEntry[Int] =
     buildConf("celeborn.scale.slidingWindow.size")
