@@ -88,6 +88,12 @@ spec:
           name: metrics
           protocol: TCP
         env:
+        - name: WORKER_STATEFUL_SET_NAME
+          value: {{ include "celeborn.workerStatefulSetName" . }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         {{- range $key, $val := .Values.environments }}
         - name: {{ $key }}
           value: {{ $val | quote }}

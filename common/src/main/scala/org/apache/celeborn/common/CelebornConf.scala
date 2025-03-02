@@ -1536,6 +1536,57 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
   def secretRedactionPattern = get(SECRET_REDACTION_PATTERN)
 
   def containerInfoProviderClass = get(CONTAINER_INFO_PROVIDER)
+
+  // //////////////////////////////////////////////////////
+  //                     Auto Scaler                     //
+  // //////////////////////////////////////////////////////
+
+  def minScaleWorkerNum: Int = get(MIN_SCALE_WORKER_NUM)
+
+  def maxScaleWorkerNum: Option[Int] = get(MAX_SCALE_WORKER_NUM)
+
+  def scaleDownEnabled: Boolean = get(SCALE_DOWN_ENABLED)
+
+  def scaleDownDirectMemoryRatio: Double = get(SCALE_DOWN_DIRECT_MEMORY_RATIO)
+
+  def scaleDownDiskSpaceRatio: Double = get(SCALE_DOWN_DISK_SPACE_RATIO)
+
+  def scaleDownCpuLoad: Double = get(SCALE_DOWN_CPU_LOAD)
+
+  //  def scaleDownNetworkRatio = get(SCALE_DOWN_NETWORK_RATIO)
+
+  def scaleDownStabilizationWindowInterval: Long = get(SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL)
+
+  def scaleDownPolicyStepNumber: Int = get(SCALE_DOWN_POLICY_STEP_NUMBER)
+
+  def scaleDownPolicyPercent: Option[Double] = get(SCALE_DOWN_POLICY_PERCENT)
+
+  def scaleUpEnabled: Boolean = get(SCALE_UP_ENABLED)
+
+  def scaleUpDirectMemoryRatio: Double = get(SCALE_UP_DIRECT_MEMORY_RATIO)
+
+  def scaleUpDiskSpaceRatio: Double = get(SCALE_UP_DISK_SPACE_RATIO)
+
+  def scaleUpCPULoad: Double = get(SCALE_UP_CPU_LOAD)
+
+  //  def scaleUpNetworkRatio = get(SCALE_UP_NETWORK_RATIO)
+
+  def scaleUpStabilizationWindowInterval: Long = get(SCALE_UP_STABILIZATION_WINDOW_INTERVAL)
+
+  def scaleUpPolicyStepNumber: Int = get(SCALE_UP_POLICY_STEP_NUMBER)
+
+  def scaleUpPolicyPercent: Option[Double] = get(SCALE_UP_POLICY_PERCENT)
+
+  def scaleScalerClassName: String = get(SCALE_SCALER_CLASS_NAME)
+
+  def metricCollectorClassName: String = get(METRIC_COLLECTOR_CLASS_NAME)
+
+  //  def scaleWorkerBandwidth = get(SCALE_WORKER_BANDWIDTH)
+
+  def scaleSlidingWindowSize: Int = get(SCALE_SLIDINGWINDOW_SIZE)
+
+  def scaleCheckInterval: Long = get(SCALE_CHECK_INTERVAL)
+
 }
 
 object CelebornConf extends Logging {
@@ -6160,4 +6211,173 @@ object CelebornConf extends Logging {
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "Should be in (0.0, 1.0].")
       .createWithDefault(1)
+
+  val MIN_SCALE_WORKER_NUM: ConfigEntry[Int] =
+    buildConf("celeborn.scale.workerNumber.min")
+      .categories("worker", "scale")
+      .doc("Min number of workers")
+      .version("0.6.0")
+      .intConf
+      .createWithDefault(3)
+
+  val MAX_SCALE_WORKER_NUM: OptionalConfigEntry[Int] =
+    buildConf("celeborn.scale.workerNumber.max")
+      .categories("worker", "scale")
+      .doc("Max number of workers")
+      .version("0.6.0")
+      .intConf
+      .createOptional
+
+  val SCALE_DOWN_ENABLED: ConfigEntry[Boolean] =
+    buildConf("celeborn.scale.down.enabled")
+      .categories("worker", "scale")
+      .doc("Enable scale down")
+      .version("0.6.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SCALE_DOWN_DIRECT_MEMORY_RATIO: ConfigEntry[Double] =
+    buildConf("celeborn.scale.down.directMemory.ratio")
+      .categories("worker", "scale")
+      .doc("The min ratio for direct memory, below which the number of workers will be reduced")
+      .version("0.6.0")
+      .doubleConf
+      .createWithDefault(0.2)
+
+  val SCALE_DOWN_DISK_SPACE_RATIO: ConfigEntry[Double] =
+    buildConf("celeborn.scale.down.diskSpace.ratio")
+      .categories("worker", "scale")
+      .doc("The min ratio for disk space, below which the number of workers will be reduced")
+      .version("0.6.0")
+      .doubleConf
+      .createWithDefault(0.2)
+
+  val SCALE_DOWN_CPU_LOAD: ConfigEntry[Double] =
+    buildConf("celeborn.scale.down.cpuLoad")
+      .categories("worker", "scale")
+      .doc("The min CPU load, below which the number of workers will be reduced")
+      .version("0.6.0")
+      .doubleConf
+      .checkValue(v => v >= 0.0 && v <= 100, "Should be in [0.0, 100.0].")
+      .createWithDefault(50.0)
+  //  val SCALE_DOWN_NETWORK_RATIO: ConfigEntry[Double] =
+  //    buildConf("celeborn.scale.down.network.ratio")
+  //      .categories("worker", "scale")
+  //      .doc("The min ratio for network bandwidth, below which the number of workers will be reduced")
+  //      .version("0.6.0")
+  //      .doubleConf
+  //      .createWithDefault(0.2)
+
+  val SCALE_DOWN_STABILIZATION_WINDOW_INTERVAL: ConfigEntry[Long] =
+    buildConf("celeborn.scale.down.stabilizationWindowInterval")
+      .categories("worker", "scale")
+      .doc("Waiting time after a scale down")
+      .version("0.6.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60s")
+
+  val SCALE_DOWN_POLICY_STEP_NUMBER: ConfigEntry[Int] =
+    buildConf("celeborn.scale.down.policy.step.number")
+      .categories("worker", "scale")
+      .doc("number of scale down")
+      .version("0.6.0")
+      .intConf
+      .createWithDefault(1)
+
+  val SCALE_DOWN_POLICY_PERCENT: OptionalConfigEntry[Double] =
+    buildConf("celeborn.scale.down.policy.percent")
+      .categories("worker", "scale")
+      .doc("ratio of scale down")
+      .version("0.6.0")
+      .doubleConf
+      .createOptional
+
+  val SCALE_UP_ENABLED: ConfigEntry[Boolean] =
+    buildConf("celeborn.scale.up.enabled")
+      .categories("worker", "scale")
+      .doc("Enable scale up")
+      .version("0.6.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SCALE_UP_DIRECT_MEMORY_RATIO: ConfigEntry[Double] =
+    buildConf("celeborn.scale.up.directMemory.ratio")
+      .categories("worker", "scale")
+      .doc("The max ratio for direct memory, above which the number of workers will be increased")
+      .version("0.6.0")
+      .doubleConf
+      .createWithDefault(0.7)
+
+  val SCALE_UP_DISK_SPACE_RATIO: ConfigEntry[Double] =
+    buildConf("celeborn.scale.up.diskSpace.ratio")
+      .categories("worker", "scale")
+      .doc("The max ratio for disk space, above which the number of workers will be increased")
+      .version("0.6.0")
+      .doubleConf
+      .createWithDefault(0.7)
+
+  val SCALE_UP_CPU_LOAD: ConfigEntry[Double] =
+    buildConf("celeborn.scale.up.cpuLoad")
+      .categories("worker", "scale")
+      .doc("The max CPU load, above which the number of workers will be increased")
+      .version("0.6.0")
+      .doubleConf
+      .checkValue(v => v >= 0.0 && v <= 100, "Should be in [0.0, 100.0].")
+      .createWithDefault(90.0)
+
+  val SCALE_UP_STABILIZATION_WINDOW_INTERVAL: ConfigEntry[Long] =
+    buildConf("celeborn.scale.up.stabilizationWindowInterval")
+      .categories("worker", "scale")
+      .doc("Waiting time after a scale up")
+      .version("0.6.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60s")
+
+  val SCALE_UP_POLICY_STEP_NUMBER: ConfigEntry[Int] =
+    buildConf("celeborn.scale.up.policy.step.number")
+      .categories("worker", "scale")
+      .doc("number of scale up")
+      .version("0.6.0")
+      .intConf
+      .createWithDefault(1)
+
+  val SCALE_UP_POLICY_PERCENT: OptionalConfigEntry[Double] =
+    buildConf("celeborn.scale.up.policy.percent")
+      .categories("worker", "scale")
+      .doc("ratio of scale up")
+      .version("0.6.0")
+      .doubleConf
+      .createOptional
+
+  val SCALE_SCALER_CLASS_NAME: ConfigEntry[String] =
+    buildConf("celeborn.scale.scalerClassName")
+      .categories("master", "scale")
+      .doc("The scaler class name")
+      .version("0.6.0")
+      .stringConf
+      .createWithDefaultString("")
+
+  val METRIC_COLLECTOR_CLASS_NAME: ConfigEntry[String] =
+    buildConf("celeborn.metricCollectorClassName")
+      .categories("master", "scale")
+      .doc("The metric collector class name")
+      .version("0.6.0")
+      .stringConf
+      .createWithDefaultString("org.apache.celeborn.service.deploy.worker.metrics.WorkerMetricSink")
+
+  val SCALE_SLIDINGWINDOW_SIZE: ConfigEntry[Int] =
+    buildConf("celeborn.scale.slidingWindow.size")
+      .categories("worker", "scale")
+      .doc("The size of sliding windows used to calculate statistics about workload.")
+      .version("0.6.0")
+      .intConf
+      .createWithDefault(5)
+
+  val SCALE_CHECK_INTERVAL: ConfigEntry[Long] =
+    buildConf("celeborn.scale.check.interval")
+      .categories("worker", "scale")
+      .version("0.6.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
+
 }

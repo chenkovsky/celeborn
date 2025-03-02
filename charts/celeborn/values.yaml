@@ -28,16 +28,18 @@ fullnameOverride: ""
 # Specifies the Celeborn image to use
 image:
   # -- Image repository
-  repository: aliyunemr/remote-shuffle-service
+  repository: mp-bp-cn-shanghai.cr.volces.com/emr/celeborn
   # -- Image tag
-  tag: 0.1.1-6badd20
+  tag: nightly
   # -- Image pull policy
   pullPolicy: Always
   # -- Image name for init containter. (your-private-repo/alpine:3.18)
-  initContainerImage: alpine:3.18
+  initContainerImage: mp-bp-cn-shanghai.cr.volces.com/emr/alpine:latest
 
 # -- Image pull secrets for private image registry
-imagePullSecrets: []
+imagePullSecrets:
+  - name: regcred-vke
+  - name: emr-image-regsecret
 
 # -- Specifies the number of Celeborn master replicas to deploy, master replicas should not less than 3
 masterReplicas: 3
@@ -80,26 +82,10 @@ volumes:
       capacity: 100Gi
   # -- Specifies volumes for Celeborn worker pods
   worker:
-    - mountPath: /mnt/disk1
-      hostPath: /mnt/disk1
+    - mountPath: /mnt/vdb/emr/celeborn-nightly
+      hostPath: /mnt/vdb/emr/celeborn-nightly
       type: hostPath
       diskType: SSD
-      capacity: 100Gi
-    - mountPath: /mnt/disk2
-      hostPath: /mnt/disk2
-      type: hostPath
-      diskType: SSD
-      capacity: 100Gi
-    - mountPath: /mnt/disk3
-      hostPath: /mnt/disk3
-      type: hostPath
-      diskType: SSD
-      capacity: 100Gi
-    - mountPath: /mnt/disk4
-      hostPath: /mnt/disk4
-      type: hostPath
-      diskType: SSD
-      capacity: 100Gi
 
 # -- Celeborn configurations
 celeborn:
@@ -120,6 +106,8 @@ celeborn:
   celeborn.push.stageEnd.timeout: 120s
   celeborn.application.heartbeat.timeout: 120s
   celeborn.worker.heartbeat.timeout: 120s
+  celeborn.dynamicConfig.store.backend: FS
+  celeborn.scale.scalerClassName: org.apache.celeborn.service.deploy.master.scale.kubernetes.KubernetesScaleManager
 
 # -- Celeborn environment variables
 environments:
@@ -190,7 +178,8 @@ podAnnotations: {}
 # key2: value2
 
 # -- Pod node selector
-nodeSelector: {}
+nodeSelector:
+  emr-vke-emr-2x8cdbi9su4eea9yk0cj: emr-2x8cdbi9su4eea9yk0cj
 # key1: value1
 # key2: value2
 
@@ -262,3 +251,15 @@ rbac:
     - apiGroups: [""]
       resources: ["pods"]
       verbs: ["create", "list", "delete"]
+    - apiGroups: ["apps"]
+      resources: ["statefulsets"]
+      verbs: ["get"]
+    - apiGroups: ["apps"]
+      resources: ["statefulsets/scale"]
+      verbs: ["get", "update", "patch"]
+
+dynamicConfig: |-
+  - level: SYSTEM
+    config:
+      celeborn.scale.up.enabled: true
+      celeborn.scale.down.enabled: true

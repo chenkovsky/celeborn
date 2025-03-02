@@ -40,6 +40,7 @@ import org.apache.celeborn.service.deploy.master.clustermeta.MetaUtil;
 import org.apache.celeborn.service.deploy.master.clustermeta.ResourceProtos;
 import org.apache.celeborn.service.deploy.master.clustermeta.ResourceProtos.ResourceRequest;
 import org.apache.celeborn.service.deploy.master.clustermeta.ResourceProtos.Type;
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 
 public class HAMasterMetaManager extends AbstractMetaManager {
   private static final Logger LOG = LoggerFactory.getLogger(HAMasterMetaManager.class);
@@ -433,6 +434,49 @@ public class HAMasterMetaManager extends AbstractMetaManager {
               .build());
     } catch (CelebornRuntimeException e) {
       LOG.error("Handle app meta for {} failed!", applicationMeta.appId(), e);
+      throw e;
+    }
+  }
+
+  @Override
+  public void handleScaleOperation(ScaleOperation scaleOperation) {
+    try {
+      ratisServer.submitRequest(
+          ResourceRequest.newBuilder()
+              .setCmdType(Type.Scale)
+              .setRequestId(MasterClient.genRequestId())
+              .setScalingOperationRequest(
+                  ResourceProtos.ScalingOperationRequest.newBuilder()
+                      .setOperation(MetaUtil.toPbScaleOperation(scaleOperation))
+                      .build())
+              .build());
+    } catch (CelebornRuntimeException e) {
+      LOG.error("Handle scale operation failed!", e);
+      throw e;
+    }
+  }
+
+  @Override
+  public int isMasterActive() {
+    if (getRatisServer().isLeader()) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+
+  @Override
+  public void handleUpdateReplicas(int replicas) {
+    try {
+      ratisServer.submitRequest(
+          ResourceRequest.newBuilder()
+              .setCmdType(Type.UpdateReplicas)
+              .setRequestId(MasterClient.genRequestId())
+              .setUpdateReplicasRequest(
+                  ResourceProtos.UpdateReplicasRequest.newBuilder().setReplicas(replicas).build())
+              .build());
+    } catch (CelebornRuntimeException e) {
+      LOG.error("Handle scale operation failed!", e);
       throw e;
     }
   }

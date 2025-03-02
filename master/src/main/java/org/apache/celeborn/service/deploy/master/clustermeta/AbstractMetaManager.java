@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
@@ -54,6 +55,8 @@ import org.apache.celeborn.common.util.JavaUtils;
 import org.apache.celeborn.common.util.PbSerDeUtils;
 import org.apache.celeborn.common.util.Utils;
 import org.apache.celeborn.common.util.WorkerStatusUtils;
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
+import org.apache.celeborn.service.deploy.master.scale.ScalingWorker;
 
 /**
  * Note: Do not update the worker collections directly from outside the metadata manager, especially
@@ -93,6 +96,8 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
   public final LongAdder partitionTotalFileCount = new LongAdder();
   public final LongAdder shuffleTotalCount = new LongAdder();
   public final Map<String, Long> shuffleFallbackCounts = JavaUtils.newConcurrentHashMap();
+  public final ScaleOperation scaleOperation = new ScaleOperation();
+  public final AtomicInteger replicas = new AtomicInteger();
 
   public final ConcurrentHashMap<String, ApplicationMeta> applicationMetas =
       JavaUtils.newConcurrentHashMap();
@@ -612,5 +617,56 @@ public abstract class AbstractMetaManager implements IMetadataHandler {
       shuffleFallbackCounts.compute(
           fallbackPolicy, (k, v) -> v == null ? fallbackCounts.get(k) : v + fallbackCounts.get(k));
     }
+  }
+
+  public void updateReplicas(int replicas) {
+    this.replicas.set(replicas);
+  }
+
+  public void updateScaleOperation(ScaleOperation scaleOperation) {
+    synchronized (this.scaleOperation) {
+      this.scaleOperation.setLastScaleUpEndTime(scaleOperation.getLastScaleUpEndTime());
+      this.scaleOperation.setScaleType(scaleOperation.getScaleType());
+      this.scaleOperation.setNeedDecommissionWorkers(scaleOperation.getNeedDecommissionWorkers());
+      this.scaleOperation.setNeedRecommissionWorkers(scaleOperation.getNeedRecommissionWorkers());
+      this.scaleOperation.setLastScaleDownEndTime(scaleOperation.getLastScaleDownEndTime());
+      this.scaleOperation.setExpectedWorkerReplicaNumber(
+          scaleOperation.getExpectedWorkerReplicaNumber());
+
+      synchronized (this.workersMap) {
+        WorkerEventInfo eventInfo =
+            new WorkerEventInfo(
+                ResourceProtos.WorkerEventType.DecommissionThenIdle_VALUE,
+                scaleOperation.getCurrentScaleStartTime());
+        for (ScalingWorker worker : scaleOperation.getNeedDecommissionWorkers()) {
+          if (worker.hasUniqueId()) {
+            WorkerInfo info = this.workersMap.get(worker.getUniqueId());
+            if (info != null
+                && (info.getWorkerStatus().getState() == PbWorkerStatus.State.Normal)) {
+              workerEventInfos.put(WorkerInfo.fromUniqueId(worker.getUniqueId()), eventInfo);
+            }
+          }
+        }
+
+        eventInfo =
+            new WorkerEventInfo(
+                ResourceProtos.WorkerEventType.Recommission_VALUE,
+                scaleOperation.getCurrentScaleStartTime());
+        for (ScalingWorker worker : scaleOperation.getNeedRecommissionWorkers()) {
+          if (worker.hasUniqueId()) {
+            WorkerInfo info = this.workersMap.get(worker.getUniqueId());
+            if (info != null
+                && (info.getWorkerStatus().getState() == PbWorkerStatus.State.InDecommissionThenIdle
+                    || info.getWorkerStatus().getState() == PbWorkerStatus.State.Idle)) {
+              workerEventInfos.put(WorkerInfo.fromUniqueId(worker.getUniqueId()), eventInfo);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  public int isMasterActive() {
+    return 1;
   }
 }

@@ -32,6 +32,7 @@ import org.apache.celeborn.common.meta.WorkerStatus;
 import org.apache.celeborn.common.network.CelebornRackResolver;
 import org.apache.celeborn.common.quota.ResourceConsumption;
 import org.apache.celeborn.common.rpc.RpcEnv;
+import org.apache.celeborn.service.deploy.master.scale.ScaleOperation;
 
 public class SingleMasterMetaManager extends AbstractMetaManager {
   private static final Logger LOG = LoggerFactory.getLogger(SingleMasterMetaManager.class);
@@ -184,5 +185,15 @@ public class SingleMasterMetaManager extends AbstractMetaManager {
   @Override
   public void handleReportWorkerDecommission(List<WorkerInfo> workers, String requestId) {
     updateMetaByReportWorkerDecommission(workers);
+  }
+
+  @Override
+  public void handleScaleOperation(ScaleOperation scaleOperation) {
+    updateScaleOperation(scaleOperation);
+  }
+
+  @Override
+  public void handleUpdateReplicas(int replicas) {
+    updateReplicas(replicas);
   }
 }

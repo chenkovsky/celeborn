@@ -54,6 +54,7 @@ import org.apache.celeborn.server.common.{HttpService, Service}
 import org.apache.celeborn.service.deploy.master.clustermeta.SingleMasterMetaManager
 import org.apache.celeborn.service.deploy.master.clustermeta.ha.{HAHelper, HAMasterMetaManager, MetaHandler}
 import org.apache.celeborn.service.deploy.master.quota.QuotaManager
+import org.apache.celeborn.service.deploy.master.scale.IScaleManager
 import org.apache.celeborn.service.deploy.master.tags.TagsManager
 
 private[celeborn] class Master(
@@ -286,6 +287,24 @@ private[celeborn] class Master(
     statusSystem.decommissionWorkers.size()
   }
 
+  private val scaleManager =
+    if (conf.scaleScalerClassName.nonEmpty) {
+      val managers = Utils.loadExtensions(
+        classOf[IScaleManager],
+        scala.collection.immutable.Seq(conf.scaleScalerClassName),
+        conf)
+      assert(
+        managers.nonEmpty,
+        "A valid scale manager must be specified by config " +
+          s"${CelebornConf.SCALE_SCALER_CLASS_NAME.key}, but ${conf.scaleScalerClassName} resulted in zero " +
+          "valid scale manager.")
+      val manager = managers.head
+      manager.init(this.configService, this.statusSystem)
+      Some(manager)
+    } else {
+      None
+    }
+
   if (haEnabled) {
     masterSource.addGauge(MasterSource.RATIS_APPLY_COMPLETED_INDEX) { () =>
       getRatisApplyCompletedIndex
@@ -334,7 +353,7 @@ private[celeborn] class Master(
       checkForDFSRemnantDirsTimeOutTask =
         scheduleCheckTask(dfsExpireDirsTimeoutMS, CheckForDFSExpiredDirsTimeout)
     }
-
+    scaleManager.foreach(_.run())
   }
 
   private def scheduleCheckTask[T](timeoutMS: Long, message: T): ScheduledFuture[_] = {
@@ -360,6 +379,7 @@ private[celeborn] class Master(
     Option(checkForDFSRemnantDirsTimeOutTask).foreach(_.cancel(true))
     forwardMessageThread.shutdownNow()
     rackResolver.stop()
+    scaleManager.foreach(_.stop())
     if (authEnabled) {
       sendApplicationMetaExecutor.shutdownNow()
     }
@@ -882,12 +902,11 @@ private[celeborn] class Master(
         RequestSlotsResponse(StatusCode.WORKER_EXCLUDED, new WorkerResource(), requestSlots.packed))
     }
 
-    val numWorkers = Math.min(
-      Math.max(
-        if (requestSlots.shouldReplicate) 2 else 1,
-        if (requestSlots.maxWorkers <= 0) slotsAssignMaxWorkers
-        else Math.min(slotsAssignMaxWorkers, requestSlots.maxWorkers)),
-      numAvailableWorkers)
+    val numRequestedWorkers = Math.max(
+      if (requestSlots.shouldReplicate) 2 else 1,
+      if (requestSlots.maxWorkers <= 0) slotsAssignMaxWorkers
+      else Math.min(slotsAssignMaxWorkers, requestSlots.maxWorkers))
+    val numWorkers = Math.min(numRequestedWorkers, numAvailableWorkers)
     val startIndex = Random.nextInt(numAvailableWorkers)
     val selectedWorkers = new util.ArrayList[WorkerInfo](numWorkers)
     selectedWorkers.addAll(availableWorkers.subList(
@@ -1239,7 +1258,17 @@ private[celeborn] class Master(
   }
 
   private def handleCheckWorkersAvailable(context: RpcCallContext): Unit = {
-    context.reply(CheckWorkersAvailableResponse(!statusSystem.availableWorkers.isEmpty))
+    val available: Boolean = statusSystem.workersMap.synchronized {
+      var available: Boolean = !statusSystem.availableWorkers.isEmpty
+      if (conf.scaleUpEnabled) {
+        available = available || (conf.maxScaleWorkerNum match {
+          case Some(num) => statusSystem.scaleOperation.getExpectedWorkerReplicaNumber < num
+          case None => true
+        })
+      }
+      available
+    }
+    context.reply(CheckWorkersAvailableResponse(available))
   }
 
   private def handleWorkerEvent(
@@ -1436,20 +1465,7 @@ private[celeborn] class Master(
     }
   }
 
-  private[master] def isMasterActive: Int = {
-    // use int rather than bool for better monitoring on dashboard
-    val isActive =
-      if (haEnabled) {
-        if (statusSystem.asInstanceOf[HAMasterMetaManager].getRatisServer.isLeader) {
-          1
-        } else {
-          0
-        }
-      } else {
-        1
-      }
-    isActive
-  }
+  private[master] def isMasterActive: Int = statusSystem.isMasterActive
 
   private def getMasterGroupInfoInternal: String = {
     if (haEnabled) {
