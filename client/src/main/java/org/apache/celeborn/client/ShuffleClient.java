@@ -20,9 +20,11 @@ package org.apache.celeborn.client;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +41,7 @@ import org.apache.celeborn.common.protocol.StorageInfo;
 import org.apache.celeborn.common.rpc.RpcEndpointRef;
 import org.apache.celeborn.common.util.CelebornHadoopUtils;
 import org.apache.celeborn.common.util.ExceptionMaker;
+import org.apache.celeborn.common.write.PushFailedBatch;
 import org.apache.celeborn.common.write.PushState;
 
 /**
@@ -224,6 +227,7 @@ public abstract class ShuffleClient {
       int shuffleId,
       int partitionId,
       int attemptNumber,
+      long taskId,
       int startMapIndex,
       int endMapIndex,
       MetricsCallback metricsCallback)
@@ -233,8 +237,11 @@ public abstract class ShuffleClient {
         shuffleId,
         partitionId,
         attemptNumber,
+        taskId,
         startMapIndex,
         endMapIndex,
+        null,
+        null,
         null,
         null,
         null,
@@ -247,11 +254,14 @@ public abstract class ShuffleClient {
       int appShuffleId,
       int partitionId,
       int attemptNumber,
+      long taskId,
       int startMapIndex,
       int endMapIndex,
       ExceptionMaker exceptionMaker,
       ArrayList<PartitionLocation> locations,
       ArrayList<PbStreamHandler> streamHandlers,
+      Map<String, Set<PushFailedBatch>> failedBatchSetMap,
+      Map<String, Pair<Integer, Integer>> chunksRange,
       int[] mapAttempts,
       MetricsCallback metricsCallback)
       throws IOException;
@@ -276,7 +286,7 @@ public abstract class ShuffleClient {
    * cleanup for spark app. It must be a sync call and make sure the cleanup is done, otherwise,
    * incorrect shuffle data can be fetched in re-run tasks
    */
-  public abstract boolean reportShuffleFetchFailure(int appShuffleId, int shuffleId);
+  public abstract boolean reportShuffleFetchFailure(int appShuffleId, int shuffleId, long taskId);
 
   /**
    * Report barrier task failure. When any barrier task fails, all (shuffle) output for that stage

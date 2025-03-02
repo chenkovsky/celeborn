@@ -17,8 +17,11 @@
 
 package org.apache.celeborn.common.network.util;
 
+import java.nio.channels.spi.SelectorProvider;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
@@ -27,6 +30,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.Channel;
+import io.netty.channel.DefaultSelectStrategyFactory;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -36,6 +40,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
+import io.netty.util.concurrent.ThreadPerTaskExecutor;
 import io.netty.util.internal.PlatformDependent;
 
 import org.apache.celeborn.common.CelebornConf;
@@ -47,18 +52,32 @@ public class NettyUtils {
   private static final ByteBufAllocator[] _sharedByteBufAllocator = new ByteBufAllocator[2];
   private static final ConcurrentHashMap<String, Integer> allocatorsIndex =
       JavaUtils.newConcurrentHashMap();
+  private static final List<PooledByteBufAllocator> pooledByteBufAllocators = new ArrayList<>();
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
   }
 
-  /** Creates a Netty EventLoopGroup based on the IOMode. */
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
+    return createEventLoop(mode, numThreads, false, threadPrefix);
+  }
+
+  /** Creates a Netty EventLoopGroup based on the IOMode. */
+  public static EventLoopGroup createEventLoop(
+      IOMode mode, int numThreads, boolean conflictAvoidChooserEnable, String threadPrefix) {
     ThreadFactory threadFactory = createThreadFactory(threadPrefix);
 
     switch (mode) {
       case NIO:
-        return new NioEventLoopGroup(numThreads, threadFactory);
+        return conflictAvoidChooserEnable
+            ? new NioEventLoopGroup(
+                numThreads,
+                new ThreadPerTaskExecutor(threadFactory),
+                ConflictAvoidEventExecutorChooserFactory.INSTANCE,
+                SelectorProvider.provider(),
+                DefaultSelectStrategyFactory.INSTANCE)
+            : new NioEventLoopGroup(numThreads, threadFactory);
       case EPOLL:
         return new EpollEventLoopGroup(numThreads, threadFactory);
       default:
@@ -141,6 +160,9 @@ public class NettyUtils {
       _sharedByteBufAllocator[index] =
           createByteBufAllocator(
               conf.networkMemoryAllocatorPooled(), true, allowCache, conf.networkAllocatorArenas());
+      if (conf.networkMemoryAllocatorPooled()) {
+        pooledByteBufAllocators.add((PooledByteBufAllocator) _sharedByteBufAllocator[index]);
+      }
       if (source != null) {
         new NettyMemoryMetrics(
             _sharedByteBufAllocator[index],
@@ -178,6 +200,9 @@ public class NettyUtils {
             conf.preferDirectBufs(),
             allowCache,
             arenas);
+    if (conf.getCelebornConf().networkMemoryAllocatorPooled()) {
+      pooledByteBufAllocators.add((PooledByteBufAllocator) allocator);
+    }
     if (source != null) {
       String poolName = "default-netty-pool";
       Map<String, String> labels = new HashMap<>();
@@ -195,5 +220,9 @@ public class NettyUtils {
           labels);
     }
     return allocator;
+  }
+
+  public static List<PooledByteBufAllocator> getAllPooledByteBufAllocators() {
+    return pooledByteBufAllocators;
   }
 }

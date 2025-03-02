@@ -18,12 +18,14 @@
 package org.apache.spark.shuffle.celeborn
 
 import java.io.IOException
-import java.util
-import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeUnit}
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap, Map => JMap, Set => JSet}
+import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 
+import com.google.common.annotations.VisibleForTesting
+import org.apache.commons.lang3.tuple.Pair
 import org.apache.spark.{Aggregator, InterruptibleIterator, ShuffleDependency, TaskContext}
 import org.apache.spark.celeborn.ExceptionMakerHelper
 import org.apache.spark.internal.Logging
@@ -33,14 +35,14 @@ import org.apache.spark.shuffle.celeborn.CelebornShuffleReader.streamCreatorPool
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
-import org.apache.celeborn.client.ShuffleClient
+import org.apache.celeborn.client.{ClientUtils, ShuffleClient}
 import org.apache.celeborn.client.ShuffleClientImpl.ReduceFileGroups
 import org.apache.celeborn.client.read.{CelebornInputStream, MetricsCallback}
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.exception.{CelebornIOException, PartitionUnRetryAbleException}
 import org.apache.celeborn.common.network.client.TransportClient
 import org.apache.celeborn.common.network.protocol.TransportMessage
-import org.apache.celeborn.common.protocol.{MessageType, PartitionLocation, PbOpenStreamList, PbOpenStreamListResponse, PbStreamHandler}
+import org.apache.celeborn.common.protocol._
 import org.apache.celeborn.common.protocol.message.StatusCode
 import org.apache.celeborn.common.util.{JavaUtils, ThreadUtils, Utils}
 
@@ -57,7 +59,9 @@ class CelebornShuffleReader[K, C](
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
-  private val shuffleClient = ShuffleClient.get(
+
+  @VisibleForTesting
+  val shuffleClient = ShuffleClient.get(
     handle.appUniqueId,
     handle.lifecycleManagerHost,
     handle.lifecycleManagerPort,
@@ -111,20 +115,48 @@ class CelebornShuffleReader[K, C](
       fileGroups = shuffleClient.updateFileGroup(shuffleId, startPartition)
     } catch {
       case ce @ (_: CelebornIOException | _: PartitionUnRetryAbleException) =>
-        handleFetchExceptions(handle.shuffleId, shuffleId, 0, ce)
+        // if a task is interrupted, should not report fetch failure
+        // if a task update file group timeout, should not report fetch failure
+        checkAndReportFetchFailureForUpdateFileGroupFailure(shuffleId, ce)
       case e: Throwable => throw e
     }
 
     // host-port -> (TransportClient, PartitionLocation Array, PbOpenStreamList)
-    val workerRequestMap = new util.HashMap[
+    val workerRequestMap = new JHashMap[
       String,
-      (TransportClient, util.ArrayList[PartitionLocation], PbOpenStreamList.Builder)]()
+      (TransportClient, JArrayList[PartitionLocation], PbOpenStreamList.Builder)]()
+    // partitionId -> (partition uniqueId -> chunkRange pair)
+    val partitionId2ChunkRange = new JHashMap[Int, JMap[String, Pair[Integer, Integer]]]()
+
+    val partitionId2PartitionLocations = new JHashMap[Int, JSet[PartitionLocation]]()
 
     var partCnt = 0
 
+    // if startMapIndex > endMapIndex, means partition is skew partition and read by Celeborn implementation.
+    // locations will split to sub-partitions with startMapIndex size.
+    val splitSkewPartitionWithoutMapRange =
+      ClientUtils.readSkewPartitionWithoutMapRange(conf, startMapIndex, endMapIndex)
+
     (startPartition until endPartition).foreach { partitionId =>
       if (fileGroups.partitionGroups.containsKey(partitionId)) {
-        fileGroups.partitionGroups.get(partitionId).asScala.foreach { location =>
+        var locations = fileGroups.partitionGroups.get(partitionId)
+        if (splitSkewPartitionWithoutMapRange) {
+          val partitionLocation2ChunkRange = CelebornPartitionUtil.splitSkewedPartitionLocations(
+            new JArrayList(locations),
+            startMapIndex,
+            endMapIndex)
+          partitionId2ChunkRange.put(partitionId, partitionLocation2ChunkRange)
+          // filter locations avoid OPEN_STREAM when split skew partition without map range
+          val filterLocations = locations.asScala
+            .filter { location =>
+              null != partitionLocation2ChunkRange &&
+              partitionLocation2ChunkRange.containsKey(location.getUniqueId)
+            }
+          locations = filterLocations.asJava
+          partitionId2PartitionLocations.put(partitionId, locations)
+        }
+
+        locations.asScala.foreach { location =>
           partCnt += 1
           val hostPort = location.hostAndFetchPort
           if (!workerRequestMap.containsKey(hostPort)) {
@@ -136,7 +168,7 @@ class CelebornShuffleReader[K, C](
               pbOpenStreamList.setShuffleKey(shuffleKey)
               workerRequestMap.put(
                 hostPort,
-                (client, new util.ArrayList[PartitionLocation], pbOpenStreamList))
+                (client, new JArrayList[PartitionLocation], pbOpenStreamList))
             } catch {
               case ex: Exception =>
                 shuffleClient.excludeFailedFetchLocation(location.hostAndFetchPort, ex)
@@ -197,13 +229,22 @@ class CelebornShuffleReader[K, C](
 
     def createInputStream(partitionId: Int): Unit = {
       val locations =
-        if (fileGroups.partitionGroups.containsKey(partitionId)) {
-          new util.ArrayList(fileGroups.partitionGroups.get(partitionId))
-        } else new util.ArrayList[PartitionLocation]()
+        if (splitSkewPartitionWithoutMapRange) {
+          partitionId2PartitionLocations.get(partitionId)
+        } else {
+          fileGroups.partitionGroups.get(partitionId)
+        }
+
+      val locationList =
+        if (null == locations) {
+          new JArrayList[PartitionLocation]()
+        } else {
+          new JArrayList[PartitionLocation](locations)
+        }
       val streamHandlers =
         if (locations != null) {
-          val streamHandlerArr = new util.ArrayList[PbStreamHandler](locations.size())
-          locations.asScala.foreach { loc =>
+          val streamHandlerArr = new JArrayList[PbStreamHandler](locationList.size)
+          locationList.asScala.foreach { loc =>
             streamHandlerArr.add(locationStreamHandlerMap.get(loc))
           }
           streamHandlerArr
@@ -215,12 +256,15 @@ class CelebornShuffleReader[K, C](
             handle.shuffleId,
             partitionId,
             encodedAttemptId,
+            context.taskAttemptId(),
             startMapIndex,
             endMapIndex,
             if (throwsFetchFailure) ExceptionMakerHelper.SHUFFLE_FETCH_FAILURE_EXCEPTION_MAKER
             else null,
-            locations,
+            locationList,
             streamHandlers,
+            fileGroups.pushFailedBatches,
+            partitionId2ChunkRange.get(partitionId),
             fileGroups.mapAttempts,
             metricsCallback)
           streams.put(partitionId, inputStream)
@@ -369,13 +413,28 @@ class CelebornShuffleReader[K, C](
     }
   }
 
-  private def handleFetchExceptions(
+  @VisibleForTesting
+  def checkAndReportFetchFailureForUpdateFileGroupFailure(
+      celebornShuffleId: Int,
+      ce: Throwable): Unit = {
+    if (ce.getCause != null &&
+      (ce.getCause.isInstanceOf[InterruptedException] || ce.getCause.isInstanceOf[
+        TimeoutException])) {
+      logWarning(s"fetch shuffle ${celebornShuffleId} timeout or interrupt", ce)
+      throw ce
+    } else {
+      handleFetchExceptions(handle.shuffleId, celebornShuffleId, 0, ce)
+    }
+  }
+
+  @VisibleForTesting
+  def handleFetchExceptions(
       appShuffleId: Int,
       shuffleId: Int,
       partitionId: Int,
       ce: Throwable) = {
     if (throwsFetchFailure &&
-      shuffleClient.reportShuffleFetchFailure(appShuffleId, shuffleId)) {
+      shuffleClient.reportShuffleFetchFailure(appShuffleId, shuffleId, context.taskAttemptId())) {
       logWarning(s"Handle fetch exceptions for ${shuffleId}-${partitionId}", ce)
       throw new FetchFailedException(
         null,
@@ -392,7 +451,6 @@ class CelebornShuffleReader[K, C](
   def newSerializerInstance(dep: ShuffleDependency[K, _, C]): SerializerInstance = {
     dep.serializer.newInstance()
   }
-
 }
 
 object CelebornShuffleReader {

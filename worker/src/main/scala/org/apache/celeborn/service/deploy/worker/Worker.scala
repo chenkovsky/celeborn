@@ -208,7 +208,6 @@ private[celeborn] class Worker(
   val partitionsSorter = new PartitionFilesSorter(memoryManager, conf, workerSource)
 
   if (conf.workerCongestionControlEnabled) {
-
     CongestionController.initialize(
       workerSource,
       conf.workerCongestionControlSampleTimeWindowSeconds.toInt,
@@ -216,8 +215,7 @@ private[celeborn] class Worker(
       configService)
   }
 
-  var controller = new Controller(rpcEnv, conf, metricsSystem, workerSource)
-  rpcEnv.setupEndpoint(RpcNameConstants.WORKER_EP, controller)
+  val controller = new Controller(rpcEnv, conf, metricsSystem, workerSource)
 
   // Visible for testing
   private[worker] var internalRpcEndpoint: RpcEndpoint = _
@@ -333,6 +331,10 @@ private[celeborn] class Worker(
   val shuffleCommitInfos: ConcurrentHashMap[String, ConcurrentHashMap[Long, CommitInfo]] =
     JavaUtils.newConcurrentHashMap[String, ConcurrentHashMap[Long, CommitInfo]]()
 
+  val shuffleCommitTime
+      : ConcurrentHashMap[String, ConcurrentHashMap[Long, (Long, RpcCallContext)]] =
+    JavaUtils.newConcurrentHashMap[String, ConcurrentHashMap[Long, (Long, RpcCallContext)]]()
+
   private val masterClient = new MasterClient(internalRpcEnvInUse, conf, true)
   secretRegistry.initialize(masterClient)
 
@@ -353,8 +355,8 @@ private[celeborn] class Worker(
     ThreadUtils.newDaemonCachedThreadPool("worker-data-replicator", conf.workerReplicateThreads)
   val commitThreadPool: ThreadPoolExecutor =
     ThreadUtils.newDaemonCachedThreadPool("worker-files-committer", conf.workerCommitThreads)
-  val waitThreadPool: ThreadPoolExecutor =
-    ThreadUtils.newDaemonCachedThreadPool("worker-commit-waiter", conf.workerCommitFilesWaitThreads)
+  val commitFinishedChecker: ScheduledExecutorService =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-commit-checker")
   val cleanThreadPool: ThreadPoolExecutor =
     ThreadUtils.newDaemonCachedThreadPool(
       "worker-expired-shuffle-cleaner",
@@ -580,8 +582,10 @@ private[celeborn] class Worker(
     pushDataHandler.init(this)
     replicateHandler.init(this)
     fetchHandler.init(this)
-    controller.init(this)
     workerStatusManager.init(this)
+
+    controller.init(this)
+    rpcEnv.setupEndpoint(RpcNameConstants.WORKER_EP, controller)
 
     logInfo("Worker started.")
     rpcEnv.awaitTermination()
@@ -620,13 +624,13 @@ private[celeborn] class Worker(
         forwardMessageScheduler.shutdown()
         replicateThreadPool.shutdown()
         commitThreadPool.shutdown()
-        waitThreadPool.shutdown();
+        commitFinishedChecker.shutdown();
         asyncReplyPool.shutdown()
       } else {
         forwardMessageScheduler.shutdownNow()
         replicateThreadPool.shutdownNow()
         commitThreadPool.shutdownNow()
-        waitThreadPool.shutdownNow();
+        commitFinishedChecker.shutdownNow();
         asyncReplyPool.shutdownNow()
       }
       workerSource.appActiveConnections.clear()
@@ -784,6 +788,7 @@ private[celeborn] class Worker(
         shufflePushDataTimeout.remove(shuffleKey)
         shuffleMapperAttempts.remove(shuffleKey)
         shuffleCommitInfos.remove(shuffleKey)
+        shuffleCommitTime.remove(shuffleKey)
         workerInfo.releaseSlots(shuffleKey)
         val applicationId = Utils.splitShuffleKey(shuffleKey)._1
         if (!workerInfo.getApplicationIdSet.contains(applicationId)) {

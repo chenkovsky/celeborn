@@ -15,7 +15,11 @@
 
 add_executable(
         celeborn_network_test
-        FrameDecoderTest.cpp)
+        FrameDecoderTest.cpp
+        MessageTest.cpp
+        MessageDispatcherTest.cpp
+        TransportClientTest.cpp
+        NettyRpcEndpointRefTest.cpp)
 
 add_test(NAME celeborn_network_test COMMAND celeborn_network_test)
 
@@ -23,8 +27,10 @@ target_link_libraries(
         celeborn_network_test
         PRIVATE
         memory
+        conf
         proto
         protocol
+        network
         utils
         ${WANGLE}
         ${FIZZ}

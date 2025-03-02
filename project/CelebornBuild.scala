@@ -37,11 +37,11 @@ import CelebornCommonSettings._
 
 object Dependencies {
 
-  val zstdJniVersion = sparkClientProjects.map(_.zstdJniVersion).getOrElse("1.5.2-1")
+  val zstdJniVersion = sparkClientProjects.map(_.zstdJniVersion).getOrElse("1.5.7-1")
   val lz4JavaVersion = sparkClientProjects.map(_.lz4JavaVersion).getOrElse("1.8.0")
 
   // Dependent library versions
-  val apLoaderVersion = "3.0-8"
+  val apLoaderVersion = "3.0-9"
   val commonsCompressVersion = "1.4.1"
   val commonsCryptoVersion = "1.0.0"
   val commonsIoVersion = "2.17.0"
@@ -59,10 +59,10 @@ object Dependencies {
   val jdkToolsVersion = "0.1"
   val metricsVersion = "4.2.25"
   val mockitoVersion = "4.11.0"
-  val nettyVersion = "4.1.115.Final"
-  val ratisVersion = "3.1.2"
+  val nettyVersion = "4.1.118.Final"
+  val ratisVersion = "3.1.3"
   val roaringBitmapVersion = "1.0.6"
-  val rocksdbJniVersion = "9.5.2"
+  val rocksdbJniVersion = "9.10.0"
   val jacksonVersion = "2.15.3"
   val jakartaActivationApiVersion = "1.2.1"
   val scalatestMockitoVersion = "1.17.14"
@@ -942,7 +942,7 @@ trait SparkClientProjects {
         libraryDependencies ++= Seq(
           "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
           "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
-        ) ++ commonUnitTestDependencies
+        ) ++ commonUnitTestDependencies ++ Seq(Dependencies.mockitoInline % "test")
       )
   }
 
@@ -1106,7 +1106,7 @@ object Flink118 extends FlinkClientProjects {
 }
 
 object Flink119 extends FlinkClientProjects {
-  val flinkVersion = "1.19.1"
+  val flinkVersion = "1.19.2"
 
   // note that SBT does not allow using the period symbol (.) in project names.
   val flinkClientProjectPath = "client-flink/flink-1.19"
@@ -1116,7 +1116,7 @@ object Flink119 extends FlinkClientProjects {
 }
 
 object Flink120 extends FlinkClientProjects {
-  val flinkVersion = "1.20.0"
+  val flinkVersion = "1.20.1"
 
   // note that SBT does not allow using the period symbol (.) in project names.
   val flinkClientProjectPath = "client-flink/flink-1.20"
@@ -1146,10 +1146,11 @@ trait FlinkClientProjects {
     .aggregate(flinkCommon, flinkClient, flinkIt)
 
   // get flink major version. e.g:
-  //   1.20.0 -> 1.20
-  //   1.19.1 -> 1.19
+  //   1.20.1 -> 1.20
+  //   1.19.2 -> 1.19
   //   1.18.1 -> 1.18
   //   1.17.2 -> 1.17
+  //   1.16.3 -> 1.16
   lazy val flinkMajorVersion: String = flinkVersion.split("\\.").take(2).reduce(_ + "." + _)
 
   // the output would be something like: celeborn-client-flink-1.17-shaded_2.12-0.4.0-SNAPSHOT.jar

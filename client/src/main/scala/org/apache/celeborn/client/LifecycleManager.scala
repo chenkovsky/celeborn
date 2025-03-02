@@ -58,11 +58,15 @@ import org.apache.celeborn.common.util.{JavaUtils, PbSerDeUtils, ThreadUtils, Ut
 import org.apache.celeborn.common.util.FunctionConverter._
 import org.apache.celeborn.common.util.ThreadUtils.awaitResult
 import org.apache.celeborn.common.util.Utils.UNKNOWN_APP_SHUFFLE_ID
+import org.apache.celeborn.common.write.PushFailedBatch
 
 object LifecycleManager {
   // shuffle id -> partition id -> partition locations
   type ShuffleFileGroups =
     ConcurrentHashMap[Int, ConcurrentHashMap[Integer, util.Set[PartitionLocation]]]
+  // shuffle id -> partition uniqueId -> PushFailedBatch set
+  type ShufflePushFailedBatches =
+    ConcurrentHashMap[Int, util.HashMap[String, util.Set[PushFailedBatch]]]
   type ShuffleAllocatedWorkers =
     ConcurrentHashMap[Int, ConcurrentHashMap[String, ShufflePartitionLocationInfo]]
   type ShuffleFailedWorkers = ConcurrentHashMap[WorkerInfo, (StatusCode, Long)]
@@ -379,7 +383,7 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
         }
         causes.add(Utils.toStatusCode(info.getStatus))
       }
-      logWarning(s"Received Revive request, number of partitions ${partitionIds.size()}")
+      logDebug(s"Received Revive request, number of partitions ${partitionIds.size()}")
       handleRevive(
         context,
         shuffleId,
@@ -404,13 +408,13 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
         oldPartition,
         isSegmentGranularityVisible = commitManager.isSegmentGranularityVisible(shuffleId))
 
-    case MapperEnd(shuffleId, mapId, attemptId, numMappers, partitionId) =>
+    case MapperEnd(shuffleId, mapId, attemptId, numMappers, partitionId, pushFailedBatch) =>
       logTrace(s"Received MapperEnd TaskEnd request, " +
         s"${Utils.makeMapKey(shuffleId, mapId, attemptId)}")
       val partitionType = getPartitionType(shuffleId)
       partitionType match {
         case PartitionType.REDUCE =>
-          handleMapperEnd(context, shuffleId, mapId, attemptId, numMappers)
+          handleMapperEnd(context, shuffleId, mapId, attemptId, numMappers, pushFailedBatch)
         case PartitionType.MAP =>
           handleMapPartitionEnd(
             context,
@@ -445,8 +449,9 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
     case pb: PbReportShuffleFetchFailure =>
       val appShuffleId = pb.getAppShuffleId
       val shuffleId = pb.getShuffleId
-      logDebug(s"Received ReportShuffleFetchFailure request, appShuffleId $appShuffleId shuffleId $shuffleId")
-      handleReportShuffleFetchFailure(context, appShuffleId, shuffleId)
+      val taskId = pb.getTaskId
+      logDebug(s"Received ReportShuffleFetchFailure request, appShuffleId $appShuffleId shuffleId $shuffleId taskId $taskId")
+      handleReportShuffleFetchFailure(context, appShuffleId, shuffleId, taskId)
 
     case pb: PbReportBarrierStageAttemptFailure =>
       val appShuffleId = pb.getAppShuffleId
@@ -801,10 +806,16 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
       shuffleId: Int,
       mapId: Int,
       attemptId: Int,
-      numMappers: Int): Unit = {
+      numMappers: Int,
+      pushFailedBatches: util.Map[String, util.Set[PushFailedBatch]]): Unit = {
 
     val (mapperAttemptFinishedSuccess, allMapperFinished) =
-      commitManager.finishMapperAttempt(shuffleId, mapId, attemptId, numMappers)
+      commitManager.finishMapperAttempt(
+        shuffleId,
+        mapId,
+        attemptId,
+        numMappers,
+        pushFailedBatches = pushFailedBatches)
     if (mapperAttemptFinishedSuccess && allMapperFinished) {
       // last mapper finished. call mapper end
       logInfo(s"Last MapperEnd, call StageEnd with shuffleKey:" +
@@ -935,7 +946,8 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
   private def handleReportShuffleFetchFailure(
       context: RpcCallContext,
       appShuffleId: Int,
-      shuffleId: Int): Unit = {
+      shuffleId: Int,
+      taskId: Long): Unit = {
 
     val shuffleIds = shuffleIdMapping.get(appShuffleId)
     if (shuffleIds == null) {
@@ -945,9 +957,15 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
     shuffleIds.synchronized {
       shuffleIds.find(e => e._2._1 == shuffleId) match {
         case Some((appShuffleIdentifier, (shuffleId, true))) =>
-          logInfo(s"handle fetch failure for appShuffleId $appShuffleId shuffleId $shuffleId")
-          ret = invokeAppShuffleTrackerCallback(appShuffleId)
-          shuffleIds.put(appShuffleIdentifier, (shuffleId, false))
+          if (invokeReportTaskShuffleFetchFailurePreCheck(taskId)) {
+            logInfo(s"handle fetch failure for appShuffleId $appShuffleId shuffleId $shuffleId")
+            ret = invokeAppShuffleTrackerCallback(appShuffleId)
+            shuffleIds.put(appShuffleIdentifier, (shuffleId, false))
+          } else {
+            logInfo(
+              s"Ignoring fetch failure from appShuffleIdentifier $appShuffleIdentifier shuffleId $shuffleId taskId $taskId")
+            ret = false
+          }
         case Some((appShuffleIdentifier, (shuffleId, false))) =>
           logInfo(
             s"Ignoring fetch failure from appShuffleIdentifier $appShuffleIdentifier shuffleId $shuffleId, " +
@@ -1007,6 +1025,20 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
       case None =>
         throw new UnsupportedOperationException(
           "unexpected! appShuffleTrackerCallback is not registered")
+    }
+  }
+
+  private def invokeReportTaskShuffleFetchFailurePreCheck(taskId: Long): Boolean = {
+    reportTaskShuffleFetchFailurePreCheck match {
+      case Some(preCheck) =>
+        try {
+          preCheck.apply(taskId)
+        } catch {
+          case t: Throwable =>
+            logError(s"Error preChecking the shuffle fetch failure reported by task: $taskId", t)
+            false
+        }
+      case None => true
     }
   }
 
@@ -1768,6 +1800,14 @@ class LifecycleManager(val appUniqueId: String, val conf: CelebornConf) extends 
   // delegate workerStatusTracker to register listener
   def registerWorkerStatusListener(workerStatusListener: WorkerStatusListener): Unit = {
     workerStatusTracker.registerWorkerStatusListener(workerStatusListener)
+  }
+
+  @volatile private var reportTaskShuffleFetchFailurePreCheck
+      : Option[java.util.function.Function[java.lang.Long, Boolean]] = None
+  def registerReportTaskShuffleFetchFailurePreCheck(preCheck: java.util.function.Function[
+    java.lang.Long,
+    Boolean]): Unit = {
+    reportTaskShuffleFetchFailurePreCheck = Some(preCheck)
   }
 
   @volatile private var appShuffleTrackerCallback: Option[Consumer[Integer]] = None

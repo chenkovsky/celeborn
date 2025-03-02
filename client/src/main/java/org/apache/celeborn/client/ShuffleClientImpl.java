@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import scala.Tuple2;
+import scala.Tuple3;
 import scala.reflect.ClassTag$;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -43,6 +44,7 @@ import org.apache.celeborn.client.read.CelebornInputStream;
 import org.apache.celeborn.client.read.MetricsCallback;
 import org.apache.celeborn.common.CelebornConf;
 import org.apache.celeborn.common.exception.CelebornIOException;
+import org.apache.celeborn.common.exception.CelebornRuntimeException;
 import org.apache.celeborn.common.identity.UserIdentifier;
 import org.apache.celeborn.common.metrics.source.Role;
 import org.apache.celeborn.common.network.TransportContext;
@@ -67,6 +69,7 @@ import org.apache.celeborn.common.rpc.RpcEnv;
 import org.apache.celeborn.common.unsafe.Platform;
 import org.apache.celeborn.common.util.*;
 import org.apache.celeborn.common.write.DataBatches;
+import org.apache.celeborn.common.write.PushFailedBatch;
 import org.apache.celeborn.common.write.PushState;
 
 public class ShuffleClientImpl extends ShuffleClient {
@@ -82,6 +85,8 @@ public class ShuffleClientImpl extends ShuffleClient {
 
   private final int registerShuffleMaxRetries;
   private final long registerShuffleRetryWaitMs;
+  private final int rpcMaxRetries;
+  private final long rpcRetryWait;
   private final int maxReviveTimes;
   private final boolean testRetryRevive;
   private final int pushBufferMaxSize;
@@ -142,35 +147,42 @@ public class ShuffleClientImpl extends ShuffleClient {
 
   private final ReviveManager reviveManager;
 
+  private final boolean dataPushFailureTrackingEnabled;
+
   public static class ReduceFileGroups {
     public Map<Integer, Set<PartitionLocation>> partitionGroups;
+    public Map<String, Set<PushFailedBatch>> pushFailedBatches;
     public int[] mapAttempts;
     public Set<Integer> partitionIds;
 
     ReduceFileGroups(
         Map<Integer, Set<PartitionLocation>> partitionGroups,
         int[] mapAttempts,
-        Set<Integer> partitionIds) {
+        Set<Integer> partitionIds,
+        Map<String, Set<PushFailedBatch>> pushFailedBatches) {
       this.partitionGroups = partitionGroups;
       this.mapAttempts = mapAttempts;
       this.partitionIds = partitionIds;
+      this.pushFailedBatches = pushFailedBatches;
     }
 
     public ReduceFileGroups() {
       this.partitionGroups = null;
       this.mapAttempts = null;
       this.partitionIds = null;
+      this.pushFailedBatches = null;
     }
 
     public void update(ReduceFileGroups fileGroups) {
       partitionGroups = fileGroups.partitionGroups;
       mapAttempts = fileGroups.mapAttempts;
       partitionIds = fileGroups.partitionIds;
+      pushFailedBatches = fileGroups.pushFailedBatches;
     }
   }
 
   // key: shuffleId
-  protected final Map<Integer, Tuple2<ReduceFileGroups, String>> reduceFileGroupsMap =
+  protected final Map<Integer, Tuple3<ReduceFileGroups, String, Exception>> reduceFileGroupsMap =
       JavaUtils.newConcurrentHashMap();
 
   public ShuffleClientImpl(String appUniqueId, CelebornConf conf, UserIdentifier userIdentifier) {
@@ -180,6 +192,8 @@ public class ShuffleClientImpl extends ShuffleClient {
     this.userIdentifier = userIdentifier;
     registerShuffleMaxRetries = conf.clientRegisterShuffleMaxRetry();
     registerShuffleRetryWaitMs = conf.clientRegisterShuffleRetryWaitMs();
+    rpcMaxRetries = conf.clientRpcMaxRetries();
+    rpcRetryWait = conf.clientRpcRetryWait();
     maxReviveTimes = conf.clientPushMaxReviveTimes();
     testRetryRevive = conf.testRetryRevive();
     pushBufferMaxSize = conf.clientPushBufferMaxSize();
@@ -193,6 +207,7 @@ public class ShuffleClientImpl extends ShuffleClient {
       pushDataTimeout = conf.pushDataTimeoutMs();
     }
     authEnabled = conf.authEnabledOnClient();
+    dataPushFailureTrackingEnabled = conf.clientAdaptiveOptimizeSkewedPartitionReadEnabled();
 
     // init rpc env
     rpcEnv =
@@ -536,6 +551,8 @@ public class ShuffleClientImpl extends ShuffleClient {
             lifecycleManagerRef.askSync(
                 RegisterShuffle$.MODULE$.apply(shuffleId, numMappers, numPartitions),
                 conf.clientRpcRegisterShuffleAskTimeout(),
+                rpcMaxRetries,
+                rpcRetryWait,
                 ClassTag$.MODULE$.apply(PbRegisterShuffleResponse.class)));
   }
 
@@ -630,11 +647,12 @@ public class ShuffleClientImpl extends ShuffleClient {
   }
 
   @Override
-  public boolean reportShuffleFetchFailure(int appShuffleId, int shuffleId) {
+  public boolean reportShuffleFetchFailure(int appShuffleId, int shuffleId, long taskId) {
     PbReportShuffleFetchFailure pbReportShuffleFetchFailure =
         PbReportShuffleFetchFailure.newBuilder()
             .setAppShuffleId(appShuffleId)
             .setShuffleId(shuffleId)
+            .setTaskId(taskId)
             .build();
     PbReportShuffleFetchFailureResponse pbReportShuffleFetchFailureResponse =
         lifecycleManagerRef.askSync(
@@ -1101,6 +1119,10 @@ public class ShuffleClientImpl extends ShuffleClient {
                       attemptId,
                       partitionId,
                       nextBatchId);
+                  if (dataPushFailureTrackingEnabled) {
+                    pushState.addFailedBatch(
+                        latest.getUniqueId(), new PushFailedBatch(mapId, attemptId, nextBatchId));
+                  }
                   ReviveRequest reviveRequest =
                       new ReviveRequest(
                           shuffleId,
@@ -1167,6 +1189,10 @@ public class ShuffleClientImpl extends ShuffleClient {
 
             @Override
             public void onFailure(Throwable e) {
+              if (dataPushFailureTrackingEnabled) {
+                pushState.addFailedBatch(
+                    latest.getUniqueId(), new PushFailedBatch(mapId, attemptId, nextBatchId));
+              }
               if (pushState.exception.get() != null) {
                 return;
               }
@@ -1487,7 +1513,7 @@ public class ShuffleClientImpl extends ShuffleClient {
                           partitionIds[partitionIndex],
                           StatusCode.fromValue(statusCodeList.get(i).byteValue())));
                   if (statusCodeList.get(i) == StatusCode.SOFT_SPLIT.getValue()) {
-                    PartitionLocation loc = batches.get(i).loc;
+                    PartitionLocation loc = batches.get(partitionIndex).loc;
                     if (!newerPartitionLocationExists(
                         reducePartitionMap.get(shuffleId), loc.getId(), loc.getEpoch(), false)) {
                       ReviveRequest reviveRequest =
@@ -1533,6 +1559,13 @@ public class ShuffleClientImpl extends ShuffleClient {
                 pushState.onSuccess(hostPort);
                 callback.onSuccess(ByteBuffer.wrap(new byte[] {StatusCode.SOFT_SPLIT.getValue()}));
               } else {
+                if (dataPushFailureTrackingEnabled) {
+                  for (DataBatches.DataBatch resubmitBatch : batchesNeedResubmit) {
+                    pushState.addFailedBatch(
+                        resubmitBatch.loc.getUniqueId(),
+                        new PushFailedBatch(mapId, attemptId, resubmitBatch.batchId));
+                  }
+                }
                 ReviveRequest[] requests =
                     addAndGetReviveRequests(
                         shuffleId, mapId, attemptId, batchesNeedResubmit, StatusCode.HARD_SPLIT);
@@ -1588,6 +1621,12 @@ public class ShuffleClientImpl extends ShuffleClient {
 
           @Override
           public void onFailure(Throwable e) {
+            if (dataPushFailureTrackingEnabled) {
+              for (int i = 0; i < numBatches; i++) {
+                pushState.addFailedBatch(
+                    partitionUniqueIds[i], new PushFailedBatch(mapId, attemptId, batchIds[i]));
+              }
+            }
             if (pushState.exception.get() != null) {
               return;
             }
@@ -1708,7 +1747,15 @@ public class ShuffleClientImpl extends ShuffleClient {
 
       MapperEndResponse response =
           lifecycleManagerRef.askSync(
-              new MapperEnd(shuffleId, mapId, attemptId, numMappers, partitionId),
+              new MapperEnd(
+                  shuffleId,
+                  mapId,
+                  attemptId,
+                  numMappers,
+                  partitionId,
+                  pushState.getFailedBatches()),
+              rpcMaxRetries,
+              rpcRetryWait,
               ClassTag$.MODULE$.apply(MapperEndResponse.class));
       if (response.status() != StatusCode.SUCCESS) {
         throw new CelebornIOException("MapperEnd failed! StatusCode: " + response.status());
@@ -1741,67 +1788,73 @@ public class ShuffleClientImpl extends ShuffleClient {
     return true;
   }
 
-  protected Tuple2<ReduceFileGroups, String> loadFileGroupInternal(
+  protected Tuple3<ReduceFileGroups, String, Exception> loadFileGroupInternal(
       int shuffleId, boolean isSegmentGranularityVisible) {
-    {
-      long getReducerFileGroupStartTime = System.nanoTime();
-      String exceptionMsg = null;
-      try {
-        if (lifecycleManagerRef == null) {
-          exceptionMsg = "Driver endpoint is null!";
-          logger.warn(exceptionMsg);
-        } else {
-          GetReducerFileGroup getReducerFileGroup =
-              new GetReducerFileGroup(shuffleId, isSegmentGranularityVisible);
-
-          GetReducerFileGroupResponse response =
-              lifecycleManagerRef.askSync(
-                  getReducerFileGroup,
-                  conf.clientRpcGetReducerFileGroupAskTimeout(),
-                  ClassTag$.MODULE$.apply(GetReducerFileGroupResponse.class));
-
-          switch (response.status()) {
-            case SUCCESS:
-              logger.info(
-                  "Shuffle {} request reducer file group success using {} ms, result partition size {}.",
-                  shuffleId,
-                  TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - getReducerFileGroupStartTime),
-                  response.fileGroup().size());
-              return Tuple2.apply(
-                  new ReduceFileGroups(
-                      response.fileGroup(), response.attempts(), response.partitionIds()),
-                  null);
-            case SHUFFLE_NOT_REGISTERED:
-              logger.warn(
-                  "Request {} return {} for {}.",
-                  getReducerFileGroup,
-                  response.status(),
-                  shuffleId);
-              // return empty result
-              return Tuple2.apply(
-                  new ReduceFileGroups(
-                      response.fileGroup(), response.attempts(), response.partitionIds()),
-                  null);
-            case STAGE_END_TIME_OUT:
-            case SHUFFLE_DATA_LOST:
-              exceptionMsg =
-                  String.format(
-                      "Request %s return %s for %s.",
-                      getReducerFileGroup, response.status(), shuffleId);
-              logger.warn(exceptionMsg);
-              break;
-            default: // fall out
-          }
-        }
-      } catch (Exception e) {
-        if (e instanceof InterruptedException) {
-          Thread.currentThread().interrupt();
-        }
-        logger.error("Exception raised while call GetReducerFileGroup for {}.", shuffleId, e);
-        exceptionMsg = e.getMessage();
-      }
-      return Tuple2.apply(null, exceptionMsg);
+    long getReducerFileGroupStartTime = System.nanoTime();
+    String exceptionMsg = null;
+    Exception exception = null;
+    if (lifecycleManagerRef == null) {
+      exceptionMsg = "Driver endpoint is null!";
+      logger.warn(exceptionMsg);
+      return Tuple3.apply(null, exceptionMsg, exception);
     }
+    try {
+      GetReducerFileGroup getReducerFileGroup =
+          new GetReducerFileGroup(shuffleId, isSegmentGranularityVisible);
+
+      GetReducerFileGroupResponse response =
+          lifecycleManagerRef.askSync(
+              getReducerFileGroup,
+              conf.clientRpcGetReducerFileGroupAskTimeout(),
+              rpcMaxRetries,
+              rpcRetryWait,
+              ClassTag$.MODULE$.apply(GetReducerFileGroupResponse.class));
+      switch (response.status()) {
+        case SUCCESS:
+          logger.info(
+              "Shuffle {} request reducer file group success using {} ms, result partition size {}.",
+              shuffleId,
+              TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - getReducerFileGroupStartTime),
+              response.fileGroup().size());
+          return Tuple3.apply(
+              new ReduceFileGroups(
+                  response.fileGroup(),
+                  response.attempts(),
+                  response.partitionIds(),
+                  response.pushFailedBatches()),
+              null,
+              null);
+        case SHUFFLE_NOT_REGISTERED:
+          logger.warn(
+              "Request {} return {} for {}.", getReducerFileGroup, response.status(), shuffleId);
+          // return empty result
+          return Tuple3.apply(
+              new ReduceFileGroups(
+                  response.fileGroup(),
+                  response.attempts(),
+                  response.partitionIds(),
+                  response.pushFailedBatches()),
+              null,
+              null);
+        case STAGE_END_TIME_OUT:
+        case SHUFFLE_DATA_LOST:
+          exceptionMsg =
+              String.format(
+                  "Request %s return %s for %s.",
+                  getReducerFileGroup, response.status(), shuffleId);
+          logger.warn(exceptionMsg);
+          break;
+        default: // fall out
+      }
+    } catch (Exception e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      logger.error("Exception raised while call GetReducerFileGroup for {}.", shuffleId, e);
+      exceptionMsg = e.getMessage();
+      exception = e;
+    }
+    return Tuple3.apply(null, exceptionMsg, exception);
   }
 
   @Override
@@ -1813,21 +1866,22 @@ public class ShuffleClientImpl extends ShuffleClient {
   public ReduceFileGroups updateFileGroup(
       int shuffleId, int partitionId, boolean isSegmentGranularityVisible)
       throws CelebornIOException {
-    Tuple2<ReduceFileGroups, String> fileGroupTuple =
+    Tuple3<ReduceFileGroups, String, Exception> fileGroupTuple =
         reduceFileGroupsMap.compute(
             shuffleId,
             (id, existsTuple) -> {
-              if (existsTuple == null || existsTuple._1 == null) {
+              if (existsTuple == null || existsTuple._1() == null) {
                 return loadFileGroupInternal(shuffleId, isSegmentGranularityVisible);
               } else {
                 return existsTuple;
               }
             });
-    if (fileGroupTuple._1 == null) {
+    if (fileGroupTuple._1() == null) {
       throw new CelebornIOException(
-          loadFileGroupException(shuffleId, partitionId, (fileGroupTuple._2)));
+          loadFileGroupException(shuffleId, partitionId, (fileGroupTuple._2())),
+          fileGroupTuple._3());
     } else {
-      return fileGroupTuple._1;
+      return fileGroupTuple._1();
     }
   }
 
@@ -1845,11 +1899,14 @@ public class ShuffleClientImpl extends ShuffleClient {
       int appShuffleId,
       int partitionId,
       int attemptNumber,
+      long taskId,
       int startMapIndex,
       int endMapIndex,
       ExceptionMaker exceptionMaker,
       ArrayList<PartitionLocation> locations,
       ArrayList<PbStreamHandler> streamHandlers,
+      Map<String, Set<PushFailedBatch>> failedBatchSetMap,
+      Map<String, Pair<Integer, Integer>> chunksRange,
       int[] mapAttempts,
       MetricsCallback metricsCallback)
       throws IOException {
@@ -1882,7 +1939,10 @@ public class ShuffleClientImpl extends ShuffleClient {
           locations,
           streamHandlers,
           mapAttempts,
+          failedBatchSetMap,
+          chunksRange,
           attemptNumber,
+          taskId,
           startMapIndex,
           endMapIndex,
           fetchExcludedWorkers,
@@ -1896,7 +1956,7 @@ public class ShuffleClientImpl extends ShuffleClient {
   }
 
   @VisibleForTesting
-  public Map<Integer, Tuple2<ReduceFileGroups, String>> getReduceFileGroupsMap() {
+  public Map<Integer, Tuple3<ReduceFileGroups, String, Exception>> getReduceFileGroupsMap() {
     return reduceFileGroupsMap;
   }
 
@@ -1930,8 +1990,17 @@ public class ShuffleClientImpl extends ShuffleClient {
   @Override
   public void setupLifecycleManagerRef(String host, int port) {
     logger.info("setupLifecycleManagerRef: host = {}, port = {}", host, port);
-    lifecycleManagerRef =
-        rpcEnv.setupEndpointRef(new RpcAddress(host, port), RpcNameConstants.LIFECYCLE_MANAGER_EP);
+    try {
+      lifecycleManagerRef =
+          rpcEnv.setupEndpointRef(
+              new RpcAddress(host, port),
+              RpcNameConstants.LIFECYCLE_MANAGER_EP,
+              rpcMaxRetries,
+              rpcRetryWait);
+    } catch (Exception e) {
+      throw new CelebornRuntimeException("setupLifecycleManagerRef failed!", e);
+    }
+
     initDataClientFactoryIfNeeded();
   }
 
